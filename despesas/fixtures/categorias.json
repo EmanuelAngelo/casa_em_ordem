@@ -1,0 +1,57 @@
+[
+  {
+    "model": "despesas.categoria",
+    "pk": 1,
+    "fields": {
+      "nome": "Energia",
+      "escopo_sugerido": "COMP",
+      "icone": "mdi-flash",
+      "criado_em": "2025-09-04T00:00:00Z",
+      "atualizado_em": "2025-09-04T00:00:00Z"
+    }
+  },
+  {
+    "model": "despesas.categoria",
+    "pk": 2,
+    "fields": {
+      "nome": "Internet",
+      "escopo_sugerido": "COMP",
+      "icone": "mdi-web",
+      "criado_em": "2025-09-04T00:00:00Z",
+      "atualizado_em": "2025-09-04T00:00:00Z"
+    }
+  },
+  {
+    "model": "despesas.categoria",
+    "pk": 3,
+    "fields": {
+      "nome": "Condomínio",
+      "escopo_sugerido": "COMP",
+      "icone": "mdi-home-group",
+      "criado_em": "2025-09-04T00:00:00Z",
+      "atualizado_em": "2025-09-04T00:00:00Z"
+    }
+  },
+  {
+    "model": "despesas.categoria",
+    "pk": 4,
+    "fields": {
+      "nome": "Streaming",
+      "escopo_sugerido": "COMP",
+      "icone": "mdi-play-box-multiple",
+      "criado_em": "2025-09-04T00:00:00Z",
+      "atualizado_em": "2025-09-04T00:00:00Z"
+    }
+  },
+  {
+    "model": "despesas.categoria",
+    "pk": 5,
+    "fields": {
+      "nome": "Pessoal",
+      "escopo_sugerido": "PESS",
+      "icone": "mdi-account",
+      "criado_em": "2025-09-04T00:00:00Z",
+      "atualizado_em": "2025-09-04T00:00:00Z"
+    }
+  }
+]

@@ -1,0 +1,59 @@
+
+# --- Ambiente Virtual ---
+# Ignora a pasta do ambiente virtual que contém as dependências do Python.
+# Esta pasta é recriada em cada máquina.
+venv/
+.venv/
+env/
+.env/
+
+# --- Banco de Dados ---
+# Ignora o banco de dados de desenvolvimento SQLite.
+# O servidor de produção terá seu próprio banco de dados.
+db.sqlite3
+*.sqlite3
+
+# --- Django ---
+# Ignora a pasta para onde os arquivos estáticos são coletados.
+# O comando 'collectstatic' deve ser rodado no servidor.
+staticfiles/
+static_root/
+
+# Ignora a pasta onde os arquivos de mídia enviados por usuários são salvos.
+media/
+media_root/
+
+# --- Arquivos de Cache do Python ---
+# Ignora os arquivos de bytecode compilado do Python.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Segredos e Configurações Locais ---
+# NUNCA comite arquivos .env que contêm senhas, chaves de API, etc.
+# É uma falha de segurança grave.
+.env
+*.env
+
+# --- IDEs e Editores de Código ---
+# Ignora arquivos de configuração específicos de IDEs.
+.idea/      # JetBrains (PyCharm, IntelliJ)
+.vscode/    # Visual Studio Code
+*.sublime-project
+*.sublime-workspace
+
+# --- Sistema Operacional ---
+# Ignora arquivos de metadados do macOS e Windows.
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+# Ignora arquivos de log.
+*.log
+logs/
+
+# --- Testes e Cobertura de Código ---
+# Ignora relatórios gerados por ferramentas de teste.
+.coverage
+htmlcov/
