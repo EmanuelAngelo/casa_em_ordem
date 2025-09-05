@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.text import slugify
 
 User = get_user_model()
 
@@ -85,26 +86,39 @@ class RegraRateio(models.TextChoices):
 
 
 class Categoria(CarimboTempo):
-    """
-    Ex.: Energia, Internet, Condomínio, Streaming…
-    """
-    nome = models.CharField(max_length=80)
-    escopo_sugerido = models.CharField(
-        max_length=4,
-        choices=EscopoDespesa.choices,
-        default=EscopoDespesa.COMPARTILHADA,
-        help_text="Sugestão de escopo padrão (pode ser sobrescrita na despesa).",
-    )
-    icone = models.CharField(max_length=80, blank=True, default="")  # para o Vuetify (mdi-...)
+    nome = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=120, unique=True, blank=True)
+    ativa = models.BooleanField(default=True)
 
     class Meta:
-        verbose_name = "Categoria"
-        verbose_name_plural = "Categorias"
         ordering = ["nome"]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.nome)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nome
 
+
+class Subcategoria(CarimboTempo):
+    categoria = models.ForeignKey(Categoria, related_name="subcategorias", on_delete=models.CASCADE)
+    nome = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140, blank=True)
+    ativa = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = [("categoria", "nome")]
+        ordering = ["categoria__nome", "nome"]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.nome)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.categoria.nome} / {self.nome}"
 
 class DespesaModelo(CarimboTempo):
     """
@@ -213,7 +227,9 @@ class Lancamento(CarimboTempo):
     casal = models.ForeignKey(Casal, related_name="lancamentos", on_delete=models.CASCADE)
     despesa_modelo = models.ForeignKey(DespesaModelo, related_name="lancamentos", on_delete=models.SET_NULL, null=True, blank=True)
 
-    categoria = models.ForeignKey(Categoria, related_name="lancamentos", on_delete=models.PROTECT)
+    subcategoria = models.ForeignKey(
+        Subcategoria, related_name="lancamentos", on_delete=models.PROTECT
+    )
     escopo = models.CharField(max_length=4, choices=EscopoDespesa.choices)
 
     dono_pessoal = models.ForeignKey(
@@ -244,7 +260,9 @@ class Lancamento(CarimboTempo):
             raise ValidationError("Lançamentos compartilhados não devem ter dono_pessoal.")
 
     def __str__(self):
-        return f"{self.descricao or self.categoria} - {self.competencia:%Y-%m}"
+            cat = self.subcategoria.categoria.nome if self.subcategoria else "Sem categoria"
+            sub = self.subcategoria.nome if self.subcategoria else "-"
+            return f"{self.descricao or sub} - {cat} - {self.competencia:%Y-%m}"
 
 
 class RateioLancamento(CarimboTempo):

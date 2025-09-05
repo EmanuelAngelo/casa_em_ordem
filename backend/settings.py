@@ -123,20 +123,30 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS - ajuste o domínio do frontend PWA quando houver
 CORS_ALLOW_ALL_ORIGINS = True  # em dev; em prod, definir lista específica
 
+# REST_FRAMEWORK = {
+#     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+#     "DEFAULT_AUTHENTICATION_CLASSES": (
+#         "rest_framework_simplejwt.authentication.JWTAuthentication",
+#     ),
+#     "DEFAULT_PERMISSION_CLASSES": (
+#         "rest_framework.permissions.IsAuthenticated",
+#     ),
+#     "DEFAULT_FILTER_BACKENDS": (
+#         "django_filters.rest_framework.DjangoFilterBackend",
+#         "rest_framework.filters.OrderingFilter",
+#         "rest_framework.filters.SearchFilter",
+#     ),
+# }
+
 REST_FRAMEWORK = {
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_AUTHENTICATION_CLASSES": (
+    "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
-    "DEFAULT_PERMISSION_CLASSES": (
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
-    ),
-    "DEFAULT_FILTER_BACKENDS": (
-        "django_filters.rest_framework.DjangoFilterBackend",
-        "rest_framework.filters.OrderingFilter",
-        "rest_framework.filters.SearchFilter",
-    ),
+    ],
 }
+
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Gastos a Dois API",

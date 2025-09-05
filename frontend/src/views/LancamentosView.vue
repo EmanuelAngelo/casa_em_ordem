@@ -23,11 +23,11 @@
       </v-card-text>
     </v-card>
 
-    <!-- Dialog do Form -->
     <v-dialog v-model="dialog" persistent max-width="720px">
       <LancamentosForm
         :model="editedLancamento"
         :categorias="categorias"
+        :subcategorias="subcategorias"
         :membros="membrosOptions"
         :status-options="statusOptions"
         :escopo-options="escopoOptions"
@@ -37,7 +37,6 @@
       />
     </v-dialog>
 
-    <!-- Confirmar Exclusão -->
     <v-dialog v-model="deleteDialog" persistent max-width="400px">
       <v-card>
         <v-card-title class="text-h5">Confirmar Exclusão</v-card-title>
@@ -54,7 +53,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Dialog de Erro -->
     <v-dialog v-model="errorDialog" persistent max-width="500px">
       <v-card>
         <v-card-title class="text-h5 bg-red-darken-2">
@@ -87,6 +85,7 @@ import LancamentosForm from "@/components/LancamentosForm.vue";
 
 const lancamentos = ref([]);
 const categorias = ref([]);
+const subcategorias = ref([]); // << NOVO
 const membrosOptions = ref([]);
 
 const loading = ref(false);
@@ -112,6 +111,7 @@ const escopoOptions = [
 
 const defaultLancamento = {
   categoria_id: null,
+  subcategoria_id: null, // << NOVO
   escopo: "COMP",
   descricao: "",
   valor_total: "",
@@ -124,7 +124,7 @@ const defaultLancamento = {
 };
 
 onMounted(async () => {
-  await Promise.all([fetchCategorias(), fetchMembros()]);
+  await Promise.all([fetchCategorias(), fetchSubcategorias(), fetchMembros()]);
   await fetchLancamentos();
 });
 
@@ -144,7 +144,12 @@ const fetchLancamentos = async () => {
 
 const fetchCategorias = async () => {
   const { data } = await axios.get("/categorias/");
-  categorias.value = data;
+  categorias.value = data?.results ?? data ?? [];
+};
+
+const fetchSubcategorias = async () => {
+  const { data } = await axios.get("/subcategorias/");
+  subcategorias.value = data?.results ?? data ?? [];
 };
 
 const fetchMembros = async () => {
@@ -156,24 +161,31 @@ const fetchMembros = async () => {
 };
 
 const openForm = (item = null) => {
-  editedLancamento.value = item
-    ? {
-        id: item.id,
-        categoria_id: item.categoria?.id ?? null,
-        escopo: item.escopo,
-        descricao: item.descricao,
-        valor_total: String(item.valor_total ?? ""),
-        competencia: item.competencia,
-        data_vencimento: item.data_vencimento,
-        pagador_id: item.pagador?.id ?? null,
-        status: item.status,
-        data_pagamento: item.data_pagamento || "",
-        dono_pessoal_id: item.dono_pessoal?.id ?? null,
-      }
-    : {
-        ...defaultLancamento,
-        pagador_id: membrosOptions.value?.[0]?.value || null,
-      };
+  if (item) {
+    // tenta inferir categoria a partir da subcategoria retornada
+    const sub = item.subcategoria || null;
+    const catId = sub?.categoria?.id ?? null;
+
+    editedLancamento.value = {
+      id: item.id,
+      categoria_id: catId, // para filtrar o select
+      subcategoria_id: sub?.id ?? null, // enviado ao backend
+      escopo: item.escopo,
+      descricao: item.descricao,
+      valor_total: String(item.valor_total ?? ""),
+      competencia: item.competencia,
+      data_vencimento: item.data_vencimento,
+      pagador_id: item.pagador?.id ?? null,
+      status: item.status,
+      data_pagamento: item.data_pagamento || "",
+      dono_pessoal_id: item.dono_pessoal?.id ?? null,
+    };
+  } else {
+    editedLancamento.value = {
+      ...defaultLancamento,
+      pagador_id: membrosOptions.value?.[0]?.value || null,
+    };
+  }
   dialog.value = true;
 };
 
@@ -181,9 +193,11 @@ const saveLancamento = async (payload) => {
   saving.value = true;
   try {
     const body = { ...payload };
+    // remove vazios e campos só de UI
     Object.keys(body).forEach(
       (k) => (body[k] === "" || body[k] === null) && delete body[k]
     );
+    delete body.categoria_id; // backend não precisa disso
 
     if (body.id) {
       await axios.patch(`/lancamentos/${body.id}/`, body);

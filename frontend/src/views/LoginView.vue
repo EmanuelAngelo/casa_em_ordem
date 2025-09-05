@@ -63,21 +63,35 @@ async function onSubmit() {
   loading.value = true;
   error.value = "";
   try {
-    // ajuste se o endpoint for diferente
     const { data } = await axios.post("/token/", {
       username: username.value,
       password: password.value,
     });
+
+    // salva tokens
     localStorage.setItem("accessToken", data.access);
+    if (data.refresh) localStorage.setItem("refreshToken", data.refresh);
+    axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
+    router.replace(route.query.redirect || "/");
+
+    // opcional: salva nome p/ AppBar
     localStorage.setItem(
       "userName",
       data.user?.first_name || data.user?.username || username.value
     );
 
+    // importante: já seta o header Authorization para as próximas requisições desta sessão
+    axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
+
+    // redireciona
     const redirect = route.query.redirect || "/";
     router.replace(redirect);
   } catch (e) {
-    error.value = "Usuário ou senha inválidos.";
+    // tenta mensagem do backend, senão genérica
+    error.value =
+      e?.response?.data?.detail ||
+      e?.response?.data?.non_field_errors?.[0] ||
+      "Usuário ou senha inválidos.";
   } finally {
     loading.value = false;
   }

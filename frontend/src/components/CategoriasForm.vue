@@ -156,8 +156,8 @@ const emit = defineEmits(["save", "close"]);
 
 const local = reactive({
   id: null,
-  categoria_id: null, // controle de UI
-  subcategoria_id: null, // enviado ao backend
+  categoria_id: null, // novo: escolha do grupo
+  subcategoria_id: null, // novo: enviado ao backend
   escopo: "COMP",
   descricao: "",
   valor_total: "",
@@ -169,7 +169,9 @@ const local = reactive({
   dono_pessoal_id: null,
 });
 
-// normaliza subcategorias para sempre ter categoria_id (facilita o filtro)
+/** quando vier a lista de subcategorias no formato com categoria aninhada,
+ *  normalizamos para ter 'categoria_id' para filtrar mais fácil.
+ */
 const subcategoriasNormalizadas = computed(() =>
   (props.subcategorias || []).map((s) => ({
     ...s,
@@ -189,6 +191,7 @@ watch(
   (m) => {
     Object.assign(local, {
       id: m?.id ?? null,
+      // Se o backend retornou subcategoria/categoria aninhados:
       categoria_id: m?.categoria?.id ?? null,
       subcategoria_id: m?.subcategoria?.id ?? null,
       escopo: m?.escopo ?? "COMP",
@@ -201,8 +204,7 @@ watch(
       data_pagamento: m?.data_pagamento ?? "",
       dono_pessoal_id: m?.dono_pessoal_id ?? m?.dono_pessoal?.id ?? null,
     });
-
-    // se tem subcategoria, garante que categoria_id acompanha
+    // se tem subcategoria definida, garante que categoria_id acompanha
     if (!local.categoria_id && local.subcategoria_id) {
       const sub = subcategoriasNormalizadas.value.find(
         (s) => s.id === local.subcategoria_id
@@ -214,7 +216,7 @@ watch(
 );
 
 function onCategoriaChange() {
-  // limpa subcategoria se ela não pertencer ao novo grupo
+  // limpamos subcategoria se ela não pertencer ao novo grupo
   const match = subcategoriasNormalizadas.value.find(
     (s) => s.id === local.subcategoria_id
   );
@@ -225,18 +227,12 @@ function onCategoriaChange() {
 
 function emitSave() {
   const payload = { ...local };
-
-  // limpeza de campos vazios
-  Object.keys(payload).forEach((k) => {
-    if (payload[k] === "" || payload[k] === null) delete payload[k];
-  });
-
-  // backend não usa categoria_id (é só para UI)
+  // remove vazios
+  Object.keys(payload).forEach(
+    (k) => (payload[k] === "" || payload[k] === null) && delete payload[k]
+  );
+  // IMPORTANTE: backend usa subcategoria_id; categoria_id é só para UI (não precisa enviar)
   delete payload.categoria_id;
-
-  // valor_total como string numérica está ok; se quiser forçar número:
-  // if (payload.valor_total !== undefined) payload.valor_total = Number(payload.valor_total)
-
   emit("save", payload);
 }
 </script>

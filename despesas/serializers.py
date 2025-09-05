@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Casal, MembroCasal, Categoria, DespesaModelo, RegraRateioPadrao,
+    Casal, MembroCasal, Categoria, Subcategoria, Lancamento, DespesaModelo, RegraRateioPadrao,
     Lancamento, RateioLancamento, EscopoDespesa, RegraRateio, StatusLancamento
 )
 
@@ -36,7 +36,56 @@ class CasalSerializer(serializers.ModelSerializer):
 class CategoriaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Categoria
-        fields = ("id", "nome", "escopo_sugerido", "icone")
+        fields = ["id", "nome", "slug", "ativa"]
+
+class SubcategoriaSerializer(serializers.ModelSerializer):
+    categoria = CategoriaSerializer(read_only=True)
+    categoria_id = serializers.PrimaryKeyRelatedField(
+        source="categoria", queryset=Categoria.objects.all(), write_only=True
+    )
+
+    class Meta:
+        model = Subcategoria
+        fields = ["id", "nome", "slug", "ativa", "categoria", "categoria_id"]
+
+class LancamentoSerializer(serializers.ModelSerializer):
+    # write
+    subcategoria_id = serializers.PrimaryKeyRelatedField(
+        source="subcategoria", queryset=Subcategoria.objects.all(), write_only=True
+    )
+    pagador_id = serializers.PrimaryKeyRelatedField(
+        source="pagador", queryset=User.objects.all(), write_only=True
+    )
+    dono_pessoal_id = serializers.PrimaryKeyRelatedField(
+        source="dono_pessoal", queryset=User.objects.all(), write_only=True, allow_null=True, required=False
+    )
+    # read
+    subcategoria = SubcategoriaSerializer(read_only=True)
+    categoria = CategoriaSerializer(source="subcategoria.categoria", read_only=True)
+    pagador = UsuarioSlimSerializer(read_only=True)
+    dono_pessoal = UsuarioSlimSerializer(read_only=True)
+
+    class Meta:
+        model = Lancamento
+        fields = [
+            "id", "casal", "despesa_modelo",
+            "subcategoria_id", "subcategoria", "categoria",
+            "escopo", "dono_pessoal_id", "dono_pessoal",
+            "descricao", "competencia", "data_vencimento",
+            "valor_total", "status", "data_pagamento",
+            "pagador_id", "pagador",
+            "criado_por", "criado_em", "atualizado_em",
+        ]
+        read_only_fields = ("casal", "criado_por", "criado_em", "atualizado_em")
+
+    def validate(self, data):
+        escopo = data.get("escopo", getattr(self.instance, "escopo", None))
+        dono = data.get("dono_pessoal", getattr(self.instance, "dono_pessoal", None))
+        if escopo == EscopoDespesa.PESSOAL and not dono:
+            raise serializers.ValidationError("Lançamentos pessoais exigem dono_pessoal.")
+        if escopo == EscopoDespesa.COMPARTILHADA and dono:
+            raise serializers.ValidationError("Lançamentos compartilhados não devem ter dono_pessoal.")
+        return data
 
 
 class RegraRateioPadraoSerializer(serializers.ModelSerializer):
@@ -95,39 +144,3 @@ class RateioLancamentoSerializer(serializers.ModelSerializer):
         model = RateioLancamento
         fields = ("id", "lancamento", "membro", "membro_id", "percentual", "valor", "criado_em", "atualizado_em")
         read_only_fields = ("criado_em", "atualizado_em")
-
-
-class LancamentoSerializer(serializers.ModelSerializer):
-    categoria = CategoriaSerializer(read_only=True)
-    categoria_id = serializers.PrimaryKeyRelatedField(
-        queryset=Categoria.objects.all(), write_only=True, source="categoria"
-    )
-    dono_pessoal = UsuarioSlimSerializer(read_only=True)
-    dono_pessoal_id = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), write_only=True, source="dono_pessoal", allow_null=True, required=False
-    )
-    pagador = UsuarioSlimSerializer(read_only=True)
-    pagador_id = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), write_only=True, source="pagador"
-    )
-    criado_por = UsuarioSlimSerializer(read_only=True)
-    rateios = RateioLancamentoSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Lancamento
-        fields = (
-            "id", "casal", "despesa_modelo", "categoria", "categoria_id", "escopo",
-            "dono_pessoal", "dono_pessoal_id", "descricao", "competencia", "data_vencimento",
-            "valor_total", "status", "data_pagamento", "pagador", "pagador_id",
-            "criado_por", "rateios", "criado_em", "atualizado_em"
-        )
-        read_only_fields = ("casal", "criado_por", "rateios", "criado_em", "atualizado_em")
-
-    def validate(self, data):
-        escopo = data.get("escopo", getattr(self.instance, "escopo", None))
-        dono = data.get("dono_pessoal", getattr(self.instance, "dono_pessoal", None))
-        if escopo == EscopoDespesa.PESSOAL and not dono:
-            raise serializers.ValidationError("Lançamentos pessoais exigem dono_pessoal.")
-        if escopo == EscopoDespesa.COMPARTILHADA and dono:
-            raise serializers.ValidationError("Lançamentos compartilhados não devem ter dono_pessoal.")
-        return data

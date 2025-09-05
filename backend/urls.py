@@ -5,18 +5,19 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from despesas.views import (
-    PublicCategoriaViewSet, CasalViewSet, MembroCasalViewSet,
+    CategoriaViewSet, SubcategoriaViewSet, LancamentoViewSet, CasalViewSet, MembroCasalViewSet,
     DespesaModeloViewSet, RegraRateioPadraoViewSet,
     LancamentoViewSet, RateioLancamentoViewSet
 )
 
 router = DefaultRouter()
-router.register(r"categorias", PublicCategoriaViewSet, basename="categoria")
+router.register(r"categorias", CategoriaViewSet, basename="categoria")
+router.register(r"subcategorias", SubcategoriaViewSet, basename="subcategoria")
+router.register(r"lancamentos", LancamentoViewSet, basename="lancamento")
 router.register(r"casais", CasalViewSet, basename="casal")
 router.register(r"membros", MembroCasalViewSet, basename="membro-casal")
 router.register(r"despesas-modelo", DespesaModeloViewSet, basename="despesa-modelo")
 router.register(r"rateios-padrao", RegraRateioPadraoViewSet, basename="rateio-padrao")
-router.register(r"lancamentos", LancamentoViewSet, basename="lancamento")
 router.register(r"rateios", RateioLancamentoViewSet, basename="rateio-lancamento")
 
 urlpatterns = [
