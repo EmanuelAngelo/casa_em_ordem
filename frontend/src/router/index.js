@@ -1,43 +1,71 @@
 import { createRouter, createWebHistory } from "vue-router";
 
-const routes = [
-  {
-    path: "/login",
-    name: "login",
-    component: () => import("@/views/LoginView.vue"),
-    meta: { public: true },
-  },
-  {
-    path: "/",
-    component: () => import("@/views/TelaPrincipal.vue"),
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: "",
-        name: "home",
-        component: () => import("@/views/HomeView.vue"),
-      },
-      {
-        path: "lancamentos",
-        name: "lancamentos",
-        component: () => import("@/views/LancamentosView.vue"),
-      },
-    ],
-  },
-  { path: "/:pathMatch(.*)*", redirect: "/" },
-];
+// lazy
+const TelaPrincipal = () => import("../views/TelaPrincipal.vue");
+const Dashboard = () => import("../views/HomeView.vue");
+const Lancamentos = () => import("@/views/LancamentosView.vue");
+const Categorias = () => import("@/views/CategoriasView.vue");
+const Login = () => import("@/views/LoginView.vue");
+const Register = () => import("../views/RegisterView.vue");
+const MeuCasal = () => import("@/views/MeuCasalView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes: [
+    // PÚBLICAS (sem layout)
+    {
+      path: "/login",
+      name: "login",
+      component: Login,
+      meta: { public: true, hideChrome: true },
+    },
+    {
+      path: "/register",
+      name: "register",
+      component: Register,
+      meta: { public: true, hideChrome: true },
+    },
+    {
+      path: "/categorias",
+      name: "categorias",
+      component: Categorias,
+      meta: { public: true, hideChrome: true },
+    },
+
+    // AUTENTICADAS (com layout)
+    {
+      path: "/",
+      component: TelaPrincipal, // aqui tem drawer/topbar
+      children: [
+        { path: "", name: "dashboard", component: Dashboard },
+        { path: "lancamentos", name: "lancamentos", component: Lancamentos },
+        { path: "categorias", name: "categorias", component: Categorias },
+        { path: "meu-casal", name: "meu-casal", component: MeuCasal },
+        { path: "categorias", name: "categorias", component: Categorias },
+      ],
+    },
+
+    // fallback
+    { path: "/:pathMatch(.*)*", redirect: "/" },
+  ],
 });
 
-// guard simples (ajuste conforme sua auth real)
-router.beforeEach((to) => {
-  if (to.meta.public) return true;
+// guard simples
+router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem("accessToken");
-  if (!token) return { name: "login", query: { redirect: to.fullPath } };
-  return true;
+
+  // Se rota é privada e não tem token, manda pro login
+  if (!to.meta?.public && !token) {
+    const redirect = encodeURIComponent(to.fullPath || "/");
+    return next(`/login?redirect=${redirect}`);
+  }
+
+  // Se já está logado e tentou abrir /login ou /register, vai pro app
+  if (to.meta?.public && token) {
+    return next("/");
+  }
+
+  next();
 });
 
 export default router;

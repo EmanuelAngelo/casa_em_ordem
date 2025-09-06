@@ -35,13 +35,27 @@
         <v-list density="compact" nav class="flex-grow-1">
           <v-list-item
             prepend-icon="mdi-view-dashboard"
+            :disabled="$route.meta?.hideChrome"
             title="Dashboard"
             to="/"
           />
           <v-list-item
+            prepend-icon="mdi-email-arrow-right-outline"
+            :disabled="$route.meta?.hideChrome"
+            title="Meu Casal"
+            to="/meu-casal"
+          />
+          <v-list-item
             prepend-icon="mdi-cash-multiple"
+            :disabled="$route.meta?.hideChrome"
             title="Lançamentos"
             to="/lancamentos"
+          />
+          <v-list-item
+            prepend-icon="mdi-shape-plus-outline"
+            :disabled="$route.meta?.hideChrome"
+            title="Categorias"
+            to="/categorias"
           />
           <!-- <v-list-item prepend-icon="mdi-cog-outline" title="Configurações" to="/config" /> -->
           <!-- <v-list-item v-if="isStaff" prepend-icon="mdi-account-group" title="Usuários" to="/usuarios" /> -->

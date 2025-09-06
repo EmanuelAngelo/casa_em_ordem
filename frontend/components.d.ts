@@ -15,5 +15,7 @@ declare module 'vue' {
     LancamentosList: typeof import('./src/components/LancamentosList.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SubcategoriasForm: typeof import('./src/components/SubcategoriasForm.vue')['default']
+    SubcategoriasList: typeof import('./src/components/SubcategoriasList.vue')['default']
   }
 }

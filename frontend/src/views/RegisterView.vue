@@ -4,17 +4,29 @@
       <v-col cols="12" sm="8" md="5" lg="4">
         <v-card elevation="8">
           <v-toolbar color="blue-darken-3">
-            <v-toolbar-title>Acessar</v-toolbar-title>
+            <v-toolbar-title>Criar conta</v-toolbar-title>
           </v-toolbar>
 
           <v-card-text class="pt-6">
             <v-form @submit.prevent="onSubmit" :disabled="loading">
               <v-text-field
+                v-model="first_name"
+                label="Nome"
+                prepend-inner-icon="mdi-account"
+                class="mb-3"
+              />
+              <v-text-field
                 v-model="username"
                 label="Usuário"
-                prepend-inner-icon="mdi-account"
-                autocomplete="username"
+                prepend-inner-icon="mdi-account-circle"
                 required
+                class="mb-3"
+              />
+              <v-text-field
+                v-model="email"
+                label="E-mail"
+                prepend-inner-icon="mdi-email"
+                type="email"
                 class="mb-3"
               />
               <v-text-field
@@ -22,9 +34,15 @@
                 label="Senha"
                 type="password"
                 prepend-inner-icon="mdi-lock"
-                autocomplete="current-password"
                 required
+                class="mb-3"
               />
+              <v-text-field
+                v-model="nome_casal"
+                label="Nome do casal (opcional)"
+                prepend-inner-icon="mdi-heart"
+              />
+
               <v-btn
                 class="mt-4"
                 color="blue-darken-3"
@@ -32,16 +50,18 @@
                 :loading="loading"
                 type="submit"
               >
-                Entrar
+                Criar e entrar
               </v-btn>
             </v-form>
-            <v-card-actions class="justify-center">
-              <RouterLink to="/register">Criar conta</RouterLink>
-            </v-card-actions>
+
             <v-alert v-if="error" type="error" variant="tonal" class="mt-4">
               {{ error }}
             </v-alert>
           </v-card-text>
+
+          <v-card-actions class="justify-center">
+            <RouterLink to="/login">Já tem conta? Entrar</RouterLink>
+          </v-card-actions>
         </v-card>
       </v-col>
     </v-row>
@@ -56,8 +76,11 @@ import axios from "@/api/axios";
 const router = useRouter();
 const route = useRoute();
 
+const first_name = ref("");
 const username = ref("");
+const email = ref("");
 const password = ref("");
+const nome_casal = ref("");
 const loading = ref(false);
 const error = ref("");
 
@@ -65,35 +88,31 @@ async function onSubmit() {
   loading.value = true;
   error.value = "";
   try {
-    const { data } = await axios.post("/token/", {
+    const { data } = await axios.post("/auth/register/", {
+      first_name: first_name.value,
       username: username.value,
+      email: email.value,
       password: password.value,
+      nome_casal: nome_casal.value,
     });
 
-    // salva tokens
+    // salva tokens e nome para AppBar
     localStorage.setItem("accessToken", data.access);
-    if (data.refresh) localStorage.setItem("refreshToken", data.refresh);
-    axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
-    router.replace(route.query.redirect || "/");
-
-    // opcional: salva nome p/ AppBar
+    localStorage.setItem("refreshToken", data.refresh);
     localStorage.setItem(
       "userName",
       data.user?.first_name || data.user?.username || username.value
     );
 
-    // importante: já seta o header Authorization para as próximas requisições desta sessão
+    // seta header Authorization imediatamente
     axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
 
-    // redireciona
+    // redireciona (já tem casal criado e vínculo feito)
     const redirect = route.query.redirect || "/";
     router.replace(redirect);
   } catch (e) {
-    // tenta mensagem do backend, senão genérica
     error.value =
-      e?.response?.data?.detail ||
-      e?.response?.data?.non_field_errors?.[0] ||
-      "Usuário ou senha inválidos.";
+      e?.response?.data?.detail || "Não foi possível criar sua conta.";
   } finally {
     loading.value = false;
   }

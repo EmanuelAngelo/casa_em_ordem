@@ -11,6 +11,10 @@
       <v-skeleton-loader type="table-row@5" />
     </template>
 
+    <template #item.categoria="{ item }">
+      {{ item.categoria?.nome || "-" }}
+    </template>
+
     <template #item.ativa="{ item }">
       <v-chip :color="item.ativa ? 'green' : 'red'" size="small" label>
         {{ item.ativa ? "Ativa" : "Inativa" }}
@@ -37,6 +41,7 @@ defineEmits(["edit", "delete"]);
 
 const headers = [
   { title: "Nome", key: "nome" },
+  { title: "Categoria", key: "categoria" },
   { title: "Status", key: "ativa", width: 120 },
   { title: "Ações", key: "actions", sortable: false, align: "end", width: 120 },
 ];
