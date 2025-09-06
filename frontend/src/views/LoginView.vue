@@ -1,5 +1,5 @@
 <template>
-  <v-container fluid class="fill-height">
+  <v-container fluid class="fill-height bg-grey-lighten-4">
     <v-row class="d-flex align-center justify-center">
       <v-col cols="12" sm="8" md="5" lg="4">
         <v-card elevation="8">
@@ -99,3 +99,10 @@ async function onSubmit() {
   }
 }
 </script>
+<style scoped>
+.bg-grey-lighten-4 {
+  background: url("https://images.pexels.com/photos/1767434/pexels-photo-1767434.jpeg")
+    no-repeat center center fixed !important;
+  background-size: cover;
+}
+</style>
