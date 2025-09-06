@@ -17,6 +17,16 @@
       {{ formatCurrency(item.valor_total) }}
     </template>
 
+    <!-- coluna competencia -->
+    <template #item.competencia="{ item }">
+      {{ formatDate(item.competencia) }}
+    </template>
+
+    <!-- coluna vencimento -->
+    <template #item.data_vencimento="{ item }">
+      {{ formatDate(item.data_vencimento) }}
+    </template>
+
     <!-- coluna escopo -->
     <template #item.escopo="{ item }">
       <v-chip
@@ -102,5 +112,12 @@ function formatCurrency(v) {
     style: "currency",
     currency: "BRL",
   });
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 </script>
