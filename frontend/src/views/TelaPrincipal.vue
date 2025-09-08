@@ -52,6 +52,14 @@
             to="/lancamentos"
           />
           <v-list-item
+            prepend-icon="mdi-file-cog"
+            :disabled="$route.meta?.hideChrome"
+            title="Modelos de Despesa"
+            value="despesas-modelo"
+            to="/modelos"
+          />
+
+          <v-list-item
             prepend-icon="mdi-shape-plus-outline"
             :disabled="$route.meta?.hideChrome"
             title="Categorias"

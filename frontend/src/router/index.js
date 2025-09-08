@@ -8,6 +8,7 @@ const Categorias = () => import("@/views/CategoriasView.vue");
 const Login = () => import("@/views/LoginView.vue");
 const Register = () => import("../views/RegisterView.vue");
 const MeuCasal = () => import("@/views/MeuCasalView.vue");
+const DespesasModelo = () => import("@/views/DespesasModeloView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
@@ -31,7 +32,12 @@ const router = createRouter({
       component: Categorias,
       meta: { public: true, hideChrome: true },
     },
-
+    {
+      path: "/modelos",
+      name: "despesas-modelo",
+      component: DespesasModelo,
+      meta: { public: true, hideChrome: true },
+    },
     // AUTENTICADAS (com layout)
     {
       path: "/",
@@ -42,6 +48,7 @@ const router = createRouter({
         { path: "categorias", name: "categorias", component: Categorias },
         { path: "meu-casal", name: "meu-casal", component: MeuCasal },
         { path: "categorias", name: "categorias", component: Categorias },
+        { path: "modelos", name: "despesas-modelo", component: DespesasModelo },
       ],
     },
 

@@ -11,6 +11,8 @@ declare module 'vue' {
     AppFooter: typeof import('./src/components/AppFooter.vue')['default']
     CategoriasForm: typeof import('./src/components/CategoriasForm.vue')['default']
     CategoriasList: typeof import('./src/components/CategoriasList.vue')['default']
+    DespesasModeloForm: typeof import('./src/components/DespesasModeloForm.vue')['default']
+    DespesasModeloList: typeof import('./src/components/DespesasModeloList.vue')['default']
     LancamentosForm: typeof import('./src/components/LancamentosForm.vue')['default']
     LancamentosList: typeof import('./src/components/LancamentosList.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
