@@ -31,6 +31,7 @@
         :membros="membrosOptions"
         :status-options="statusOptions"
         :escopo-options="escopoOptions"
+        :cartoes="cartoes"
         :saving="saving"
         @close="dialog = false"
         @save="saveLancamento"
@@ -40,15 +41,15 @@
     <v-dialog v-model="deleteDialog" persistent max-width="400px">
       <v-card>
         <v-card-title class="text-h5">Confirmar Exclusão</v-card-title>
-        <v-card-text
-          >Tem certeza que deseja excluir este lançamento?</v-card-text
-        >
+        <v-card-text>
+          Tem certeza que deseja excluir este lançamento?
+        </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="deleteDialog = false">Cancelar</v-btn>
-          <v-btn color="red-darken-1" @click="deleteLancamentoConfirmed"
-            >Excluir</v-btn
-          >
+          <v-btn color="red-darken-1" @click="deleteLancamentoConfirmed">
+            Excluir
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -85,8 +86,10 @@ import LancamentosForm from "@/components/LancamentosForm.vue";
 
 const lancamentos = ref([]);
 const categorias = ref([]);
-const subcategorias = ref([]); // << NOVO
+const subcategorias = ref([]); // << mantém
 const membrosOptions = ref([]);
+
+const cartoes = ref([]); // << NOVO
 
 const loading = ref(false);
 const saving = ref(false);
@@ -111,7 +114,7 @@ const escopoOptions = [
 
 const defaultLancamento = {
   categoria_id: null,
-  subcategoria_id: null, // << NOVO
+  subcategoria_id: null,
   escopo: "COMP",
   descricao: "",
   valor_total: "",
@@ -121,14 +124,26 @@ const defaultLancamento = {
   status: "PENDENTE",
   data_pagamento: "",
   dono_pessoal_id: null,
+
+  // Campos do cartão (apenas para criação; edição de parcela segue fluxo normal)
+  compra_cartao: false,
+  cartao_id: null,
+  parcelas_total: 1,
+  primeira_competencia: "",
+  primeiro_vencimento: "",
 };
 
 onMounted(async () => {
-  await Promise.all([fetchCategorias(), fetchSubcategorias(), fetchMembros()]);
+  await Promise.all([
+    fetchCategorias(),
+    fetchSubcategorias(),
+    fetchMembros(),
+    fetchCartoes(),
+  ]);
   await fetchLancamentos();
 });
 
-const fetchLancamentos = async () => {
+async function fetchLancamentos() {
   loading.value = true;
   try {
     const resp = await axios.get("/lancamentos/");
@@ -140,29 +155,38 @@ const fetchLancamentos = async () => {
   } finally {
     loading.value = false;
   }
-};
+}
 
-const fetchCategorias = async () => {
+async function fetchCategorias() {
   const { data } = await axios.get("/categorias/");
   categorias.value = data?.results ?? data ?? [];
-};
+}
 
-const fetchSubcategorias = async () => {
+async function fetchSubcategorias() {
   const { data } = await axios.get("/subcategorias/");
   subcategorias.value = data?.results ?? data ?? [];
-};
+}
 
-const fetchMembros = async () => {
+async function fetchMembros() {
   const { data } = await axios.get("/casais/meu/");
   membrosOptions.value = (data?.membros || []).map((m) => ({
     label: m.usuario.first_name || m.usuario.username,
     value: m.usuario.id,
   }));
-};
+}
 
-const openForm = (item = null) => {
+async function fetchCartoes() {
+  try {
+    const { data } = await axios.get("/cartoes/");
+    cartoes.value = data?.results ?? data ?? [];
+  } catch (e) {
+    // se ainda não existir o endpoint/cartões, só segue sem travar a tela
+    cartoes.value = [];
+  }
+}
+
+function openForm(item = null) {
   if (item) {
-    // tenta inferir categoria a partir da subcategoria retornada
     const sub = item.subcategoria || null;
     const catId = sub?.categoria?.id ?? null;
 
@@ -179,6 +203,13 @@ const openForm = (item = null) => {
       status: item.status,
       data_pagamento: item.data_pagamento || "",
       dono_pessoal_id: item.dono_pessoal?.id ?? null,
+
+      // em edição de lançamento existente, não ativamos “compra_cartao”
+      compra_cartao: false,
+      cartao_id: null,
+      parcelas_total: 1,
+      primeira_competencia: "",
+      primeiro_vencimento: "",
     };
   } else {
     editedLancamento.value = {
@@ -187,40 +218,47 @@ const openForm = (item = null) => {
     };
   }
   dialog.value = true;
-};
+}
 
-const saveLancamento = async (payload) => {
+async function saveLancamento(payload) {
   saving.value = true;
   try {
     const body = { ...payload };
+
     // remove vazios e campos só de UI
-    Object.keys(body).forEach(
-      (k) => (body[k] === "" || body[k] === null) && delete body[k]
-    );
+    Object.keys(body).forEach((k) => {
+      if (body[k] === "" || body[k] === null) delete body[k];
+    });
     delete body.categoria_id; // backend não precisa disso
 
     if (body.id) {
       await axios.patch(`/lancamentos/${body.id}/`, body);
     } else {
+      // se for compra no cartão e você já tiver implementado um endpoint específico,
+      // aqui seria algo como POST /lancamentos/cartao/
+      // por enquanto, envia no /lancamentos/ normal (o backend ignora extras se não suportar)
       await axios.post("/lancamentos/", body);
     }
+
     dialog.value = false;
     await fetchLancamentos();
   } catch (error) {
     console.error("Erro ao salvar lançamento:", error);
-    errorMessage.value = "Não foi possível salvar o lançamento.";
+    errorMessage.value = error.response?.data
+      ? JSON.stringify(error.response.data)
+      : "Não foi possível salvar o lançamento.";
     errorDialog.value = true;
   } finally {
     saving.value = false;
   }
-};
+}
 
-const confirmDelete = (item) => {
+function confirmDelete(item) {
   lancamentoToDelete.value = item;
   deleteDialog.value = true;
-};
+}
 
-const deleteLancamentoConfirmed = async () => {
+async function deleteLancamentoConfirmed() {
   try {
     await axios.delete(`/lancamentos/${lancamentoToDelete.value.id}/`);
     deleteDialog.value = false;
@@ -233,9 +271,9 @@ const deleteLancamentoConfirmed = async () => {
     errorDialog.value = true;
     console.error("Erro ao excluir lançamento:", error);
   }
-};
+}
 
-const quitLancamento = async (item) => {
+async function quitLancamento(item) {
   try {
     await axios.post(`/lancamentos/${item.id}/quitar/`, {});
   } catch (error) {
@@ -244,5 +282,5 @@ const quitLancamento = async (item) => {
   } finally {
     await fetchLancamentos();
   }
-};
+}
 </script>
