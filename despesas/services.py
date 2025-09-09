@@ -1,11 +1,12 @@
 from datetime import date
+from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
 from .models import (
-    Casal, MembroCasal, DespesaModelo, Lancamento, RateioLancamento,
+    Casal, CompraCartao, MembroCasal, DespesaModelo, Lancamento, RateioLancamento,
     EscopoDespesa, RegraRateio, StatusLancamento, RegraRateioPadrao
 )
 
@@ -77,7 +78,7 @@ def _ratear_valor(valor_total: Decimal, regra: str, casal: Casal, despesa: Despe
 
 
 @transaction.atomic
-def gerar_lancamentos_competencia(casal: Casal, competencia: date, criado_por: User) -> list[Lancamento]:
+def gerar_lancamentos_competencia(casal: Casal, competencia: date, criado_por: User) -> list[Lancamento]: # type: ignore
     """
     Gera lançamentos da competência (1º dia do mês) para todas as DespesaModelo ativas do casal.
     Não duplica se já existir lançamento idêntico (despesa + competência).
@@ -143,3 +144,36 @@ def quitar_lancamento(lancamento: Lancamento, data_pagamento=None, pagador: User
         lancamento.pagador = pagador
     lancamento.save(update_fields=["status", "data_pagamento", "pagador", "atualizado_em"])
     return lancamento
+
+
+@transaction.atomic
+def gerar_lancamentos_da_compra(compra: "CompraCartao", criado_por):
+    """
+    Cria N Lancamentos (parcelas) a partir de CompraCartao.
+    """
+    valor_parcela = (compra.valor_total / compra.parcelas_total).quantize(compra.valor_total.as_tuple())
+    competencia = compra.primeira_competencia
+    venc = compra.primeiro_vencimento
+
+    for i in range(1, compra.parcelas_total + 1):
+        Lancamento.objects.create(
+            casal=compra.casal,
+            despesa_modelo=None,
+            subcategoria=compra.subcategoria,
+            escopo=compra.escopo,
+            dono_pessoal=compra.dono_pessoal,
+            descricao=f"{compra.descricao} ({i}/{compra.parcelas_total})",
+            competencia=competencia,
+            data_vencimento=venc,
+            valor_total=valor_parcela,
+            status=StatusLancamento.PENDENTE,
+            data_pagamento=None,
+            pagador=compra.pagador,
+            criado_por=criado_por,
+            compra_cartao=compra,
+            parcela_numero=i,
+            parcelas_total=compra.parcelas_total,
+        )
+        # próxima parcela (+1 mês)
+        competencia = (competencia + relativedelta(months=+1)).replace(day=1)
+        venc = venc + relativedelta(months=+1)

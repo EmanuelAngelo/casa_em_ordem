@@ -10,8 +10,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import (
+    CartaoCredito,
     Casal,
     Categoria,
+    CompraCartao,
     MembroCasal,
     Subcategoria,
     Lancamento,
@@ -25,6 +27,8 @@ from .permissions import (
     CasalScopedQuerysetMixin,
 )
 from .serializers import (
+    CartaoCreditoSerializer,
+    CompraCartaoSerializer,
     RegisterSerializer,
     CategoriaSerializer,
     SubcategoriaSerializer,
@@ -35,7 +39,7 @@ from .serializers import (
     MembroCasalSerializer,
     CasalSerializer,
 )
-from .services import gerar_lancamentos_competencia, quitar_lancamento
+from .services import gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
 from .utils import get_casal_ativo_do_usuario, assert_user_pertence_ao_casal
 
 User = get_user_model()
@@ -261,3 +265,30 @@ class RateioLancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     def get_casal_filter_kwargs(self):
         # filtra via lancamento.casal
         return {"lancamento__casal": self.get_casal_usuario()}
+
+
+class CartaoCreditoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
+    queryset = CartaoCredito.objects.select_related("casal").all()
+    serializer_class = CartaoCreditoSerializer
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(casal=self.get_casal_usuario())
+
+    def perform_create(self, serializer):
+        serializer.save(casal=self.get_casal_usuario())
+
+class CompraCartaoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
+    queryset = CompraCartao.objects.select_related("casal", "cartao", "subcategoria", "pagador", "dono_pessoal").all()
+    serializer_class = CompraCartaoSerializer
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ["cartao", "subcategoria", "escopo"]
+    search_fields = ["descricao"]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(casal=self.get_casal_usuario())
+
+    def perform_create(self, serializer):
+        compra = serializer.save(casal=self.get_casal_usuario())
+        gerar_lancamentos_da_compra(compra, criado_por=self.request.user)

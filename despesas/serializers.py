@@ -13,6 +13,8 @@ from .models import (
     RateioLancamento,
     EscopoDespesa,
     RegraRateio,
+    CartaoCredito, 
+    CompraCartao,
 )
 
 User = get_user_model()
@@ -150,6 +152,45 @@ class RateioLancamentoSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("criado_em", "atualizado_em")
 
+
+class CartaoCreditoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CartaoCredito
+        fields = ["id", "nome", "bandeira", "limite", "dia_fechamento", "dia_vencimento", "ativo"]
+
+class CompraCartaoSerializer(serializers.ModelSerializer):
+    cartao = CartaoCreditoSerializer(read_only=True)
+    cartao_id = serializers.PrimaryKeyRelatedField(source="cartao", queryset=CartaoCredito.objects.all(), write_only=True)
+
+    subcategoria = SubcategoriaSerializer(read_only=True)
+    subcategoria_id = serializers.PrimaryKeyRelatedField(source="subcategoria", queryset=Subcategoria.objects.all(), write_only=True)
+
+    pagador = UsuarioSlimSerializer(read_only=True)
+    pagador_id = serializers.PrimaryKeyRelatedField(source="pagador", queryset=User.objects.all(), write_only=True)
+
+    dono_pessoal = UsuarioSlimSerializer(read_only=True)
+    dono_pessoal_id = serializers.PrimaryKeyRelatedField(source="dono_pessoal", queryset=User.objects.all(), write_only=True, allow_null=True, required=False)
+
+    class Meta:
+        model = CompraCartao
+        fields = [
+            "id", "casal", "cartao", "cartao_id", "descricao",
+            "subcategoria", "subcategoria_id", "escopo", "dono_pessoal", "dono_pessoal_id",
+            "valor_total", "parcelas_total", "primeira_competencia", "primeiro_vencimento",
+            "pagador", "pagador_id", "compra_cartao", "parcela_numero", "parcelas_total", "criado_em", "atualizado_em"
+        ]
+        read_only_fields = ("casal", "criado_em", "atualizado_em")
+
+    def validate(self, data):
+        escopo = data.get("escopo", getattr(self.instance, "escopo", None))
+        dono = data.get("dono_pessoal", getattr(self.instance, "dono_pessoal", None))
+        if escopo == EscopoDespesa.PESSOAL and not dono:
+            raise serializers.ValidationError("Compras pessoais exigem dono_pessoal.")
+        if escopo == EscopoDespesa.COMPARTILHADA and dono:
+            raise serializers.ValidationError("Compras compartilhadas não devem ter dono_pessoal.")
+        if data.get("parcelas_total", 1) < 1:
+            raise serializers.ValidationError("parcelas_total deve ser >= 1.")
+        return data
 
 class LancamentoSerializer(serializers.ModelSerializer):
     # write-only

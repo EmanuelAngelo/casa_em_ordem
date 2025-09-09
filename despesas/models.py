@@ -220,32 +220,80 @@ class StatusLancamento(models.TextChoices):
     CANCELADO = "CANCELADO", "Cancelado"
 
 
+class BandeiraCartao(models.TextChoices):
+    VISA = "VISA", "Visa"
+    MASTERCARD = "MASTER", "Mastercard"
+    ELO = "ELO", "Elo"
+    AMEX = "AMEX", "Amex"
+    OUTRO = "OUTRO", "Outro"
+
+class CartaoCredito(CarimboTempo):
+    casal = models.ForeignKey(Casal, related_name="cartoes", on_delete=models.CASCADE)
+    nome = models.CharField(max_length=80)  # ex: "Cartão Maria - Nubank"
+    bandeira = models.CharField(max_length=10, choices=BandeiraCartao.choices, default=BandeiraCartao.OUTRO)
+    limite = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    dia_fechamento = models.PositiveSmallIntegerField(default=1)  # 1..28
+    dia_vencimento = models.PositiveSmallIntegerField(default=10) # 1..28
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Cartão de crédito"
+        verbose_name_plural = "Cartões de crédito"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return f"{self.nome}"
+
+class CompraCartao(CarimboTempo):
+    """
+    Agrupa as parcelas (cada parcela é um Lancamento).
+    """
+    casal = models.ForeignKey(Casal, related_name="compras_cartao", on_delete=models.CASCADE)
+    cartao = models.ForeignKey(CartaoCredito, related_name="compras", on_delete=models.PROTECT)
+    descricao = models.CharField(max_length=180, blank=True, default="")
+    subcategoria = models.ForeignKey(Subcategoria, related_name="compras_cartao", on_delete=models.PROTECT)
+    escopo = models.CharField(max_length=4, choices=EscopoDespesa.choices, default=EscopoDespesa.COMPARTILHADA)
+    dono_pessoal = models.ForeignKey(User, related_name="compras_cartao_pessoais", on_delete=models.PROTECT, null=True, blank=True)
+
+    valor_total = models.DecimalField(max_digits=12, decimal_places=2)
+    parcelas_total = models.PositiveSmallIntegerField(default=1)
+    primeira_competencia = models.DateField(help_text="Competência da 1ª parcela (YYYY-MM-01)")
+    primeiro_vencimento = models.DateField(help_text="Vencimento da 1ª parcela")
+
+    pagador = models.ForeignKey(User, related_name="compras_cartao_pagador", on_delete=models.PROTECT)
+
+    class Meta:
+        verbose_name = "Compra no cartão"
+        verbose_name_plural = "Compras no cartão"
+        ordering = ["-criado_em"]
+
+    def __str__(self):
+        return f"{self.descricao or 'Compra cartão'} ({self.parcelas_total}x)"
+
 class Lancamento(CarimboTempo):
     """
     Gasto lançado (instância mensal/única).
     """
     casal = models.ForeignKey(Casal, related_name="lancamentos", on_delete=models.CASCADE)
     despesa_modelo = models.ForeignKey(DespesaModelo, related_name="lancamentos", on_delete=models.SET_NULL, null=True, blank=True)
-
     subcategoria = models.ForeignKey(
         Subcategoria, related_name="lancamentos", on_delete=models.PROTECT
     )
     escopo = models.CharField(max_length=4, choices=EscopoDespesa.choices)
-
     dono_pessoal = models.ForeignKey(
         User, related_name="lancamentos_pessoais", on_delete=models.PROTECT,
         null=True, blank=True, help_text="Obrigatório se escopo = Pessoal"
     )
-
     descricao = models.CharField(max_length=180, blank=True, default="")
     competencia = models.DateField(help_text="Use o 1º dia do mês como referência (YYYY-MM-01).")
     data_vencimento = models.DateField()
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
-
     status = models.CharField(max_length=10, choices=StatusLancamento.choices, default=StatusLancamento.PENDENTE)
     data_pagamento = models.DateField(null=True, blank=True)
     pagador = models.ForeignKey(User, related_name="pagamentos", on_delete=models.PROTECT)
-
+    compra_cartao = models.ForeignKey(CompraCartao, related_name="parcelas", on_delete=models.SET_NULL, null=True, blank=True)
+    parcela_numero = models.PositiveSmallIntegerField(null=True, blank=True)
+    parcelas_total = models.PositiveSmallIntegerField(null=True, blank=True)
     criado_por = models.ForeignKey(User, related_name="lancamentos_criados", on_delete=models.PROTECT)
 
     class Meta:
