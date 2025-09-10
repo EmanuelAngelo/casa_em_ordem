@@ -36,7 +36,6 @@ def _ratear_valor(valor_total: Decimal, regra: str, casal: Casal, despesa: Despe
 
     if regra == RegraRateio.IGUAL:
         parte = (valor_total / Decimal(len(membros))).quantize(Decimal("0.01"))
-        # distribui arredondamento no último
         valores = []
         acumulado = Decimal("0.00")
         for i, uid in enumerate(membros, start=1):
@@ -78,11 +77,7 @@ def _ratear_valor(valor_total: Decimal, regra: str, casal: Casal, despesa: Despe
 
 
 @transaction.atomic
-def gerar_lancamentos_competencia(casal: Casal, competencia: date, criado_por: User) -> list[Lancamento]: # type: ignore
-    """
-    Gera lançamentos da competência (1º dia do mês) para todas as DespesaModelo ativas do casal.
-    Não duplica se já existir lançamento idêntico (despesa + competência).
-    """
+def gerar_lancamentos_competencia(casal: Casal, competencia: date, criado_por: User) -> list[Lancamento]:
     if competencia.day != 1:
         competencia = competencia.replace(day=1)
 
@@ -94,11 +89,7 @@ def gerar_lancamentos_competencia(casal: Casal, competencia: date, criado_por: U
     )
 
     for dm in despesas:
-        # verifica duplicidade
-        ja_existe = Lancamento.objects.filter(
-            casal=casal, despesa_modelo=dm, competencia=competencia
-        ).exists()
-        if ja_existe:
+        if Lancamento.objects.filter(casal=casal, despesa_modelo=dm, competencia=competencia).exists():
             continue
 
         venc = competencia.replace(day=dm.dia_vencimento)
@@ -115,18 +106,15 @@ def gerar_lancamentos_competencia(casal: Casal, competencia: date, criado_por: U
             data_vencimento=venc,
             valor_total=valor,
             status=StatusLancamento.PENDENTE,
-            pagador=criado_por,      # default: quem gerou (pode editar depois)
+            pagador=criado_por,
             criado_por=criado_por,
         )
 
-        # cria rateios
         for uid, perc, v in _ratear_valor(valor, dm.regra_rateio, casal, dm):
             RateioLancamento.objects.create(
                 lancamento=lanc, membro_id=uid, percentual=perc, valor=v
             )
-
         criados.append(lanc)
-
     return criados
 
 
@@ -146,29 +134,66 @@ def quitar_lancamento(lancamento: Lancamento, data_pagamento=None, pagador: User
     return lancamento
 
 
-# --- FUNÇÃO CORRIGIDA ---
+# --- NOVA FUNÇÃO ADICIONADA ---
+@transaction.atomic
+def criar_rateios_para_lancamento(lancamento: Lancamento):
+    """
+    Cria os registros de RateioLancamento para um Lancamento.
+    - PESSOAL: 100% para o dono_pessoal.
+    - COMPARTILHADA: Divide igualmente entre os membros ativos do casal.
+    """
+    lancamento.rateios.all().delete()  # Garante que não haja rateios duplicados em caso de atualização
+
+    casal = lancamento.casal
+    valor_total = lancamento.valor_total
+
+    if lancamento.escopo == EscopoDespesa.PESSOAL:
+        if not lancamento.dono_pessoal:
+            raise ValidationError("Lançamento pessoal precisa de um dono.")
+        RateioLancamento.objects.create(
+            lancamento=lancamento,
+            membro=lancamento.dono_pessoal,
+            valor=valor_total
+        )
+        return
+
+    if lancamento.escopo == EscopoDespesa.COMPARTILHADA:
+        membros_ids = _membros_ativos_ids(casal)
+        if not membros_ids:
+            raise ValidationError("Casal sem membros ativos para rateio.")
+        
+        num_membros = len(membros_ids)
+        valor_base = (valor_total / num_membros).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        
+        valores_rateio = [valor_base] * num_membros
+        soma_arredondada = sum(valores_rateio)
+        diferenca = valor_total - soma_arredondada
+        
+        if diferenca > 0:
+            valores_rateio[-1] += diferenca
+
+        for i, membro_id in enumerate(membros_ids):
+            RateioLancamento.objects.create(
+                lancamento=lancamento,
+                membro_id=membro_id,
+                valor=valores_rateio[i]
+            )
+
+# --- FUNÇÃO ATUALIZADA ---
 @transaction.atomic
 def gerar_lancamentos_da_compra(compra: "CompraCartao", criado_por):
     """
-    Cria N Lancamentos (parcelas) a partir de CompraCartao, garantindo
-    que a soma das parcelas seja igual ao valor total.
+    Cria N Lancamentos (parcelas) a partir de CompraCartao e os rateios para cada um.
     """
     valor_total_compra = compra.valor_total
     total_parcelas = compra.parcelas_total
     
-    # Calcula o valor padrão da parcela, arredondando para baixo
     valor_parcela_padrao = (valor_total_compra / total_parcelas).quantize(
         Decimal("0.01"), rounding=ROUND_DOWN
     )
-    
-    # Gera uma lista com o valor de cada parcela
     valores_parcelas = [valor_parcela_padrao] * total_parcelas
+    diferenca = valor_total_compra - sum(valores_parcelas)
     
-    # Calcula a diferença de arredondamento
-    soma_arredondada = sum(valores_parcelas)
-    diferenca = valor_total_compra - soma_arredondada
-    
-    # Adiciona a diferença à última parcela para garantir a soma exata
     if diferenca > 0:
         valores_parcelas[-1] += diferenca
 
@@ -176,7 +201,7 @@ def gerar_lancamentos_da_compra(compra: "CompraCartao", criado_por):
     venc = compra.primeiro_vencimento
 
     for i in range(total_parcelas):
-        Lancamento.objects.create(
+        lanc = Lancamento.objects.create(
             casal=compra.casal,
             despesa_modelo=None,
             subcategoria=compra.subcategoria,
@@ -185,7 +210,7 @@ def gerar_lancamentos_da_compra(compra: "CompraCartao", criado_por):
             descricao=f"{compra.descricao or 'Compra no cartão'} ({i + 1}/{total_parcelas})",
             competencia=competencia,
             data_vencimento=venc,
-            valor_total=valores_parcelas[i],  # Usa o valor calculado para esta parcela
+            valor_total=valores_parcelas[i],
             status=StatusLancamento.PENDENTE,
             data_pagamento=None,
             pagador=compra.pagador,
@@ -194,6 +219,9 @@ def gerar_lancamentos_da_compra(compra: "CompraCartao", criado_por):
             parcela_numero=i + 1,
             parcelas_total=total_parcelas,
         )
-        # Avança para a competência e vencimento do próximo mês
+        # Chama a nova função para criar os rateios da parcela
+        criar_rateios_para_lancamento(lanc)
+
         competencia = (competencia + relativedelta(months=+1)).replace(day=1)
         venc = venc + relativedelta(months=+1)
+

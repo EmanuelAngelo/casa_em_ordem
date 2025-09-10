@@ -4,32 +4,59 @@
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Meu Casal</v-toolbar-title>
         <v-spacer />
-        <v-btn icon @click="loadCasal"><v-icon>mdi-refresh</v-icon></v-btn>
+        <v-btn icon @click="loadCasal" :disabled="saving"
+          ><v-icon>mdi-refresh</v-icon></v-btn
+        >
       </v-toolbar>
 
       <v-card-text>
         <v-row>
+          <!-- Coluna da Esquerda: Informações e Salários -->
           <v-col cols="12" md="6">
-            <v-list two-line>
-              <v-list-subheader>Informações</v-list-subheader>
-              <v-list-item>
-                <v-list-item-title>Nome</v-list-item-title>
-                <v-list-item-subtitle>{{
-                  casal?.nome || "-"
-                }}</v-list-item-subtitle>
-              </v-list-item>
-              <v-list-subheader class="mt-4">Membros</v-list-subheader>
-              <v-list-item v-for="m in casal?.membros || []" :key="m.id">
-                <v-list-item-title>
-                  {{ m.usuario.first_name || m.usuario.username }}
-                </v-list-item-title>
-                <v-list-item-subtitle>
-                  {{ m.ativo ? "Ativo" : "Inativo" }}
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
+            <v-skeleton-loader
+              v-if="loading"
+              type="list-item-two-line@2"
+            ></v-skeleton-loader>
+            <div v-else>
+              <v-text-field
+                v-model="casal.nome"
+                label="Nome do Casal"
+                variant="outlined"
+                density="compact"
+                class="mb-4"
+              />
+
+              <v-list-subheader>Membros e Salários</v-list-subheader>
+              <div
+                v-for="membro in casal.membros"
+                :key="membro.id"
+                class="mb-3"
+              >
+                <v-text-field
+                  v-model.number="membro.salario_mensal"
+                  :label="`Salário de ${
+                    membro.usuario.first_name || membro.usuario.username
+                  }`"
+                  type="number"
+                  step="0.01"
+                  prefix="R$"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                />
+              </div>
+              <v-btn
+                color="blue-darken-3"
+                :loading="saving"
+                @click="saveMembros"
+                class="mt-2"
+              >
+                Salvar Alterações
+              </v-btn>
+            </div>
           </v-col>
 
+          <!-- Coluna da Direita: Convite (sem alterações) -->
           <v-col cols="12" md="6">
             <v-card variant="outlined">
               <v-card-title>Convidar parceiro(a)</v-card-title>
@@ -62,28 +89,71 @@
         </v-row>
       </v-card-text>
     </v-card>
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
+      {{ snackbar.text }}
+    </v-snackbar>
   </v-container>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import axios from "@/api/axios";
 
-const casal = ref(null);
+const casal = ref({ nome: "", membros: [] });
+const loading = ref(true);
+const saving = ref(false);
 const loadingInvite = ref(false);
 const usernameOrEmail = ref("");
 const inviteMsg = ref("");
 const inviteType = ref("info");
+const snackbar = reactive({ show: false, text: "", color: "success" });
 
 onMounted(loadCasal);
 
 async function loadCasal() {
+  loading.value = true;
   try {
     const { data } = await axios.get("/casais/meu/");
     casal.value = data;
   } catch (e) {
-    // usuário sem casal (incomum neste fluxo)
-    casal.value = null;
+    casal.value = { nome: "Não encontrado", membros: [] };
+    snackbar.value = {
+      show: true,
+      text: "Não foi possível carregar dados do casal.",
+      color: "error",
+    };
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function saveMembros() {
+  saving.value = true;
+  try {
+    // Salva o nome do casal primeiro
+    await axios.patch(`/casais/${casal.value.id}/`, { nome: casal.value.nome });
+
+    // Salva o salário de cada membro em paralelo
+    const promises = casal.value.membros.map((membro) =>
+      axios.patch(`/membros/${membro.id}/`, {
+        salario_mensal: membro.salario_mensal || 0,
+      })
+    );
+    await Promise.all(promises);
+
+    snackbar.value = {
+      show: true,
+      text: "Dados do casal salvos com sucesso!",
+      color: "success",
+    };
+  } catch (e) {
+    snackbar.value = {
+      show: true,
+      text: "Erro ao salvar os dados.",
+      color: "error",
+    };
+  } finally {
+    saving.value = false;
   }
 }
 

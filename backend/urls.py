@@ -5,7 +5,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from despesas.views import (
-    CartaoCreditoViewSet, CategoriaViewSet, CompraCartaoViewSet, SubcategoriaViewSet, LancamentoViewSet, CasalViewSet, MembroCasalViewSet,
+    CartaoCreditoViewSet, CategoriaViewSet, CompraCartaoViewSet, RelatorioFinanceiroView, SubcategoriaViewSet, LancamentoViewSet, CasalViewSet, MembroCasalViewSet,
     DespesaModeloViewSet, RegraRateioPadraoViewSet,
     LancamentoViewSet, RateioLancamentoViewSet, RegisterView, CasalExtrasViewSet, ResumoLancamentosView
 )
@@ -30,6 +30,7 @@ urlpatterns = [
     
     # --- NOVA ROTA PARA A LISTA RESUMIDA ---
     path("api/lancamentos-resumo/", ResumoLancamentosView.as_view(), name="lancamentos-resumo"),
+    path("api/relatorio-financeiro/", RelatorioFinanceiroView.as_view(), name="relatorio-financeiro"),
 
     path("api/auth/register/", RegisterView.as_view(), name="auth-register"),
 

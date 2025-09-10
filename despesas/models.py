@@ -41,6 +41,7 @@ class MembroCasal(CarimboTempo):
     usuario = models.ForeignKey(User, related_name="membros_casal", on_delete=models.CASCADE)
     apelido = models.CharField("Apelido no casal", max_length=50, blank=True, default="")
     ativo = models.BooleanField(default=True)
+    salario_mensal =models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Valor do saláraio mensal para base de calculo.")
 
     class Meta:
         verbose_name = "Membro do casal"

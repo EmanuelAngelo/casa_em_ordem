@@ -1,5 +1,7 @@
 from datetime import date
+from decimal import Decimal
 from itertools import chain # Import para combinar listas
+from django.db.models import Sum
 from operator import attrgetter # Import para ordenar objetos
 
 from django.contrib.auth import get_user_model
@@ -17,6 +19,7 @@ from .models import (
     Categoria,
     CompraCartao,
     MembroCasal,
+    StatusLancamento,
     Subcategoria,
     Lancamento,
     DespesaModelo,
@@ -42,7 +45,7 @@ from .serializers import (
     MembroCasalSerializer,
     CasalSerializer,
 )
-from .services import gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
+from .services import criar_rateios_para_lancamento, gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
 from .utils import get_casal_ativo_do_usuario, assert_user_pertence_ao_casal
 
 User = get_user_model()
@@ -220,7 +223,6 @@ class LancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ["descricao", "subcategoria__nome", "subcategoria__categoria__nome"]
-    # CORREÇÃO: Adicionado 'compra_cartao' para permitir a filtragem das parcelas.
     filterset_fields = ["status", "escopo", "subcategoria", "subcategoria__categoria", "competencia", "compra_cartao"]
 
     def get_queryset(self):
@@ -229,16 +231,19 @@ class LancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         casal = self.get_casal_usuario()
-        serializer.save(casal=casal, criado_por=self.request.user)
+        lancamento = serializer.save(casal=casal, criado_por=self.request.user)
+        # Chama o serviço para criar os rateios
+        criar_rateios_para_lancamento(lancamento)
 
     def perform_update(self, serializer):
-        serializer.save()
+        lancamento = serializer.save()
+        # Também atualiza os rateios ao editar um lançamento
+        criar_rateios_para_lancamento(lancamento)
 
     @action(detail=True, methods=["post"], url_path="quitar")
     def quitar(self, request, pk=None):
         lanc = self.get_object()
         try:
-            # CORREÇÃO: Usando argumentos nomeados para passar o pagador corretamente.
             quitar_lancamento(lancamento=lanc, pagador=request.user)
             return Response({"detail": "Lançamento quitado com sucesso."})
         except Exception as e:
@@ -333,3 +338,60 @@ class ResumoLancamentosView(APIView):
         # 4. Serializa a lista combinada usando o novo serializer
         serializer = ResumoLancamentoSerializer(combined_list, many=True)
         return Response(serializer.data)
+
+
+class RelatorioFinanceiroView(APIView):
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal]
+
+    def get(self, request, *args, **kwargs):
+        casal = get_casal_ativo_do_usuario(request.user)
+        if not casal:
+            return Response({"detail": "Casal não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            competencia_str = request.query_params.get("competencia") # Espera "YYYY-MM"
+            membro_id_str = request.query_params.get("membro_id") # "geral" ou um ID de usuário
+
+            ano, mes = map(int, competencia_str.split('-'))
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Parâmetro 'competencia' (YYYY-MM) é obrigatório e deve ser válido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Filtra os rateios (a fonte da verdade sobre quem pagou o quê)
+        rateios_qs = RateioLancamento.objects.filter(
+            lancamento__casal=casal,
+            lancamento__competencia__year=ano,
+            lancamento__competencia__month=mes,
+            lancamento__status__in=[StatusLancamento.PAGO, StatusLancamento.PENDENTE] # Considera pagos e pendentes
+        )
+
+        membros_do_casal = MembroCasal.objects.filter(casal=casal, ativo=True)
+        salario_total = Decimal("0.00")
+
+        if membro_id_str and membro_id_str != "geral":
+            try:
+                membro_id = int(membro_id_str)
+                rateios_qs = rateios_qs.filter(membro_id=membro_id)
+                salario_total = membros_do_casal.get(usuario_id=membro_id).salario_mensal
+            except (ValueError, MembroCasal.DoesNotExist):
+                return Response({"detail": "Membro não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        else: # "geral"
+             salario_total = membros_do_casal.aggregate(total=Sum('salario_mensal'))['total'] or Decimal("0.00")
+
+
+        # Agrega os gastos por categoria
+        gastos_por_categoria = rateios_qs.values(
+            'lancamento__subcategoria__categoria__nome'
+        ).annotate(
+            valor_total=Sum('valor')
+        ).order_by('-valor_total')
+
+        total_gasto = rateios_qs.aggregate(total=Sum('valor'))['total'] or Decimal("0.00")
+
+        return Response({
+            "salario_declarado": salario_total,
+            "total_gasto": total_gasto,
+            "gastos_por_categoria": list(gastos_por_categoria)
+        })

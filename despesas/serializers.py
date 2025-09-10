@@ -94,6 +94,7 @@ class MembroCasalSerializer(serializers.ModelSerializer):
             "usuario",
             "usuario_id",
             "apelido",
+            "salario_mensal", # Adicionado aqui
             "ativo",
             "criado_em",
             "atualizado_em",

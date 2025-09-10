@@ -37,7 +37,7 @@
             prepend-icon="mdi-view-dashboard"
             :disabled="$route.meta?.hideChrome"
             title="Dashboard"
-            to="/"
+            to="/relatorio"
           />
           <v-list-item
             prepend-icon="mdi-email-arrow-right-outline"
@@ -58,7 +58,11 @@
             value="despesas-modelo"
             to="/modelos"
           />
-
+          <v-list-item
+            prepend-icon="mdi-chart-pie"
+            title="Relatório Financeiro"
+            to="/relatorio"
+          />
           <v-list-item
             prepend-icon="mdi-shape-plus-outline"
             :disabled="$route.meta?.hideChrome"

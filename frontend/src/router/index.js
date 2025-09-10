@@ -9,6 +9,8 @@ const Login = () => import("@/views/LoginView.vue");
 const Register = () => import("../views/RegisterView.vue");
 const MeuCasal = () => import("@/views/MeuCasalView.vue");
 const DespesasModelo = () => import("@/views/DespesasModeloView.vue");
+const RelatorioFinanceiro = () =>
+  import("../views/RelatorioFinanceiroView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
@@ -45,6 +47,11 @@ const router = createRouter({
       children: [
         { path: "", name: "dashboard", component: Dashboard },
         { path: "lancamentos", name: "lancamentos", component: Lancamentos },
+        {
+          path: "relatorio",
+          name: "relatorio",
+          component: RelatorioFinanceiro,
+        },
         { path: "categorias", name: "categorias", component: Categorias },
         { path: "meu-casal", name: "meu-casal", component: MeuCasal },
         { path: "categorias", name: "categorias", component: Categorias },
