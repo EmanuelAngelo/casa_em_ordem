@@ -65,8 +65,6 @@
             title="Categorias"
             to="/categorias"
           />
-          <!-- <v-list-item prepend-icon="mdi-cog-outline" title="Configurações" to="/config" /> -->
-          <!-- <v-list-item v-if="isStaff" prepend-icon="mdi-account-group" title="Usuários" to="/usuarios" /> -->
           <v-list-item
             prepend-icon="mdi-logout"
             title="Sair"
@@ -77,11 +75,12 @@
       </div>
     </v-navigation-drawer>
 
-    <v-main
-      class="d-flex align-center justify-center"
-      style="min-height: 300px"
-    >
-      <div class="pa-4" style="width: 100%; height: 100%; overflow-y: auto">
+    <!-- MUDANÇA AQUI: Removido o min-height e ajustado o padding para ser menor em telas pequenas -->
+    <v-main class="d-flex align-center justify-center">
+      <div
+        class="pa-md-4 pa-2"
+        style="width: 100%; height: 100%; overflow-y: auto"
+      >
         <router-view />
       </div>
     </v-main>
