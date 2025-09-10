@@ -7,7 +7,6 @@
     <v-card-text>
       <v-form @submit.prevent="emitSave" :disabled="saving">
         <v-row dense>
-          <!-- CATEGORIA (grupo) -->
           <v-col cols="12" md="6">
             <v-select
               v-model="local.categoria_id"
@@ -22,7 +21,6 @@
             />
           </v-col>
 
-          <!-- SUBCATEGORIA (filtrada pela categoria) -->
           <v-col cols="12" md="6">
             <v-select
               v-model="local.subcategoria_id"
@@ -36,7 +34,6 @@
             />
           </v-col>
 
-          <!-- Escopo -->
           <v-col cols="12" md="6">
             <v-select
               v-model="local.escopo"
@@ -49,7 +46,6 @@
             />
           </v-col>
 
-          <!-- Valor -->
           <v-col cols="12" md="6">
             <v-text-field
               v-model="local.valor_total"
@@ -61,7 +57,6 @@
             />
           </v-col>
 
-          <!-- Descrição -->
           <v-col cols="12" md="8">
             <v-text-field
               v-model="local.descricao"
@@ -70,7 +65,6 @@
             />
           </v-col>
 
-          <!-- Status -->
           <v-col cols="12" md="4">
             <v-select
               v-model="local.status"
@@ -83,11 +77,12 @@
             />
           </v-col>
 
-          <!-- Competência (NÃO alteramos ao ligar cartão) -->
           <v-col cols="12" md="6">
             <v-text-field
               :model-value="formatBr(local.competencia)"
-              label="Competência"
+              :label="
+                local.usar_cartao ? 'Competência da 1ª Parcela' : 'Competência'
+              "
               hint="Mês a que a despesa se refere"
               persistent-hint
               prepend-inner-icon="mdi-calendar"
@@ -101,8 +96,8 @@
                   transition="scale-transition"
                   offset-y
                 >
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" icon>
+                  <template #activator="{ props: menuProps }">
+                    <v-btn v-bind="menuProps" icon>
                       <v-icon>mdi-calendar</v-icon>
                     </v-btn>
                   </template>
@@ -116,11 +111,12 @@
             </v-text-field>
           </v-col>
 
-          <!-- Vencimento -->
           <v-col cols="12" md="6">
             <v-text-field
               :model-value="formatBr(local.data_vencimento)"
-              label="Vencimento"
+              :label="
+                local.usar_cartao ? 'Vencimento da 1ª Parcela' : 'Vencimento'
+              "
               prepend-inner-icon="mdi-calendar-alert"
               readonly
               @click="menus.vencimento = true"
@@ -133,8 +129,8 @@
                   transition="scale-transition"
                   offset-y
                 >
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" icon>
+                  <template #activator="{ props: menuProps }">
+                    <v-btn v-bind="menuProps" icon>
                       <v-icon>mdi-calendar</v-icon>
                     </v-btn>
                   </template>
@@ -148,7 +144,6 @@
             </v-text-field>
           </v-col>
 
-          <!-- Dono (pessoal) -->
           <v-col cols="12" md="6" v-if="local.escopo === 'PESS'">
             <v-select
               v-model="local.dono_pessoal_id"
@@ -161,7 +156,6 @@
             />
           </v-col>
 
-          <!-- Pagador -->
           <v-col :cols="12" :md="local.escopo === 'PESS' ? 6 : 12">
             <v-select
               v-model="local.pagador_id"
@@ -174,18 +168,22 @@
             />
           </v-col>
 
-          <!-- =================== COMPRA NO CARTÃO =================== -->
-          <v-col cols="12" md="6">
+          <v-col cols="12">
             <v-switch
               v-model="local.usar_cartao"
               inset
               color="blue-darken-3"
-              label="Compra no cartão?"
-              hide-details
+              label="É uma compra parcelada no cartão?"
+              :disabled="!!local.id"
+              :hint="
+                local.id
+                  ? 'Opção disponível apenas ao criar um novo lançamento.'
+                  : ''
+              "
+              persistent-hint
             />
           </v-col>
 
-          <!-- Cartão + Novo Cartão -->
           <v-col cols="12" md="6" v-if="local.usar_cartao">
             <v-select
               v-model="local.cartao_id"
@@ -212,14 +210,27 @@
             </v-select>
           </v-col>
 
-          <!-- Novo Cartão inline -->
+          <v-col cols="12" md="6" v-if="local.usar_cartao">
+            <v-text-field
+              v-model.number="local.parcelas_total"
+              label="Total de parcelas"
+              type="number"
+              min="1"
+              prepend-inner-icon="mdi-format-list-numbered"
+              required
+            />
+          </v-col>
+
           <v-col cols="12" v-if="local.usar_cartao && showNewCard">
             <v-card variant="tonal" class="pa-3">
               <v-row dense>
+                <v-col cols="12">
+                  <div class="text-subtitle-1">Novo Cartão</div>
+                </v-col>
                 <v-col cols="12" md="6">
                   <v-text-field
-                    v-model="newCardName"
-                    label="Nome do cartão"
+                    v-model="newCard.nome"
+                    label="Nome do cartão (Ex: Maria - Nubank)"
                     prepend-inner-icon="mdi-credit-card-plus-outline"
                     :disabled="creatingCard"
                     autofocus
@@ -227,15 +238,46 @@
                   />
                 </v-col>
                 <v-col cols="12" md="6">
+                  <v-select
+                    v-model="newCard.bandeira"
+                    :items="bandeiraOptions"
+                    label="Bandeira"
+                    prepend-inner-icon="mdi-flag"
+                    :disabled="creatingCard"
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
                   <v-text-field
-                    v-model.number="newCardDueDay"
-                    label="Dia de vencimento (1–31)"
+                    v-model.number="newCard.dia_vencimento"
+                    label="Dia de vencimento (1–28)"
                     type="number"
                     min="1"
-                    max="31"
+                    max="28"
                     prepend-inner-icon="mdi-calendar-alert"
                     :disabled="creatingCard"
                     required
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="newCard.dia_fechamento"
+                    label="Dia de fechamento (1–28)"
+                    type="number"
+                    min="1"
+                    max="28"
+                    prepend-inner-icon="mdi-calendar-lock"
+                    :disabled="creatingCard"
+                    required
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="newCard.limite"
+                    label="Limite (opcional)"
+                    type="number"
+                    step="0.01"
+                    prepend-inner-icon="mdi-cash-lock"
+                    :disabled="creatingCard"
                   />
                 </v-col>
 
@@ -251,7 +293,11 @@
                   <v-btn
                     color="blue-darken-3"
                     :loading="creatingCard"
-                    :disabled="!newCardName || !validNewCardDueDay"
+                    :disabled="
+                      !newCard.nome ||
+                      !newCard.dia_vencimento ||
+                      !newCard.dia_fechamento
+                    "
                     @click="createCard"
                   >
                     Salvar cartão
@@ -261,47 +307,6 @@
             </v-card>
           </v-col>
 
-          <!-- Parcelas (mostra apenas quando é compra no cartão) -->
-          <v-col cols="12" md="4" v-if="local.usar_cartao">
-            <v-text-field
-              v-model.number="local.parcelas_total"
-              label="Total de parcelas"
-              type="number"
-              min="1"
-              prepend-inner-icon="mdi-format-list-numbered"
-              required
-            />
-          </v-col>
-
-          <v-col cols="12" md="4" v-if="local.usar_cartao">
-            <v-text-field
-              v-model.number="local.parcela_numero"
-              label="Parcela atual"
-              type="number"
-              min="1"
-              :max="local.parcelas_total || 1"
-              prepend-inner-icon="mdi-numeric"
-              required
-            />
-          </v-col>
-
-          <v-col cols="12" md="4" v-if="local.usar_cartao">
-            <v-text-field
-              :model-value="
-                cartaoSelecionado
-                  ? `Fecha dia ${cartaoSelecionado.dia_vencimento}`
-                  : '—'
-              "
-              label="Vencimento do cartão"
-              prepend-inner-icon="mdi-calendar-month-outline"
-              readonly
-              hint="Define a data de vencimento com base no cartão"
-              persistent-hint
-            />
-          </v-col>
-          <!-- ================= /COMPRA NO CARTÃO =================== -->
-
-          <!-- Data de pagamento (só quando PAGO) -->
           <v-col cols="12" md="6" v-if="local.status === 'PAGO'">
             <v-text-field
               :model-value="formatBr(local.data_pagamento)"
@@ -317,8 +322,8 @@
                   transition="scale-transition"
                   offset-y
                 >
-                  <template #activator="{ props }">
-                    <v-btn v-bind="props" icon>
+                  <template #activator="{ props: menuProps }">
+                    <v-btn v-bind="menuProps" icon>
                       <v-icon>mdi-calendar</v-icon>
                     </v-btn>
                   </template>
@@ -351,12 +356,12 @@ import axios from "@/api/axios";
 
 const props = defineProps({
   model: { type: Object, default: () => ({}) },
-  categorias: { type: Array, default: () => [] }, // [{id, nome}]
-  subcategorias: { type: Array, default: () => [] }, // [{id, nome, categoria:{id,...}}] ou {categoria_id}
-  membros: { type: Array, default: () => [] }, // [{label, value}]
-  statusOptions: { type: Array, default: () => [] }, // [{label, value}]
-  escopoOptions: { type: Array, default: () => [] }, // [{label, value}]
-  cartoes: { type: Array, default: () => [] }, // [{id, nome, dia_vencimento}]
+  categorias: { type: Array, default: () => [] },
+  subcategorias: { type: Array, default: () => [] },
+  membros: { type: Array, default: () => [] },
+  statusOptions: { type: Array, default: () => [] },
+  escopoOptions: { type: Array, default: () => [] },
+  cartoes: { type: Array, default: () => [] },
   saving: { type: Boolean, default: false },
 });
 
@@ -364,21 +369,20 @@ const emit = defineEmits(["save", "close"]);
 
 const local = reactive({
   id: null,
-  categoria_id: null, // UI
-  subcategoria_id: null, // enviado ao backend
+  categoria_id: null,
+  subcategoria_id: null,
   escopo: "COMP",
   descricao: "",
   valor_total: "",
-  competencia: "", // ISO yyyy-mm-dd (NÃO alteramos quando ligar cartão)
-  data_vencimento: "", // ISO yyyy-mm-dd (autopreenche ao escolher cartão)
+  competencia: null,
+  data_vencimento: null,
   pagador_id: null,
   status: "PENDENTE",
-  data_pagamento: "", // ISO yyyy-mm-dd
+  data_pagamento: null,
   dono_pessoal_id: null,
   usar_cartao: false,
   cartao_id: null,
   parcelas_total: 1,
-  parcela_numero: 1,
 });
 
 const menus = reactive({
@@ -387,17 +391,17 @@ const menus = reactive({
   pagamento: false,
 });
 
-/* ====== Cartões (inline create) ====== */
 const cartoesLocal = ref([]);
 const showNewCard = ref(false);
-const newCardName = ref("");
-const newCardDueDay = ref(null); // 1..31
 const creatingCard = ref(false);
-
-const validNewCardDueDay = computed(() => {
-  const n = Number(newCardDueDay.value);
-  return Number.isInteger(n) && n >= 1 && n <= 31;
+const newCard = reactive({
+  nome: "",
+  bandeira: "OUTRO",
+  limite: null,
+  dia_fechamento: 1,
+  dia_vencimento: 10,
 });
+const bandeiraOptions = ["VISA", "MASTER", "ELO", "AMEX", "OUTRO"];
 
 watch(
   () => props.cartoes,
@@ -409,22 +413,26 @@ watch(
 
 function cancelNewCard() {
   showNewCard.value = false;
-  newCardName.value = "";
-  newCardDueDay.value = null;
+  Object.assign(newCard, {
+    nome: "",
+    bandeira: "OUTRO",
+    limite: null,
+    dia_fechamento: 1,
+    dia_vencimento: 10,
+  });
 }
 
 async function createCard() {
-  if (!newCardName.value || !validNewCardDueDay.value) return;
+  if (!newCard.nome || !newCard.dia_vencimento || !newCard.dia_fechamento)
+    return;
   creatingCard.value = true;
   try {
-    // ajuste os campos conforme o seu backend de cartões
-    const { data } = await axios.post("/cartoes/", {
-      nome: newCardName.value,
-      dia_vencimento: newCardDueDay.value,
-    });
+    const payload = { ...newCard };
+    if (!payload.limite) delete payload.limite;
+
+    const { data } = await axios.post("/cartoes/", payload);
     cartoesLocal.value.push(data);
-    local.cartao_id = data.id; // seleciona o novo cartão
-    applyCardDueDate(); // autopreenche vencimento
+    local.cartao_id = data.id;
     cancelNewCard();
   } catch (e) {
     console.error("Erro ao criar cartão:", e);
@@ -432,9 +440,7 @@ async function createCard() {
     creatingCard.value = false;
   }
 }
-/* ===================================== */
 
-/** Normaliza subcategorias para garantir categoria_id acessível */
 const subcategoriasNormalizadas = computed(() =>
   (props.subcategorias || []).map((s) => ({
     ...s,
@@ -442,7 +448,6 @@ const subcategoriasNormalizadas = computed(() =>
   }))
 );
 
-/** Filtra subcategorias conforme categoria escolhida */
 const subcategoriasFiltradas = computed(() => {
   if (!local.categoria_id) return [];
   return subcategoriasNormalizadas.value.filter(
@@ -450,187 +455,102 @@ const subcategoriasFiltradas = computed(() => {
   );
 });
 
-/** Cartão selecionado (obj) */
-const cartaoSelecionado = computed(
-  () => cartoesLocal.value.find((c) => c.id === local.cartao_id) || null
-);
-
-/** Preenche o formulário ao abrir/editar */
 watch(
   () => props.model,
   (m) => {
     Object.assign(local, {
       id: m?.id ?? null,
-      categoria_id: m?.categoria_id ?? m?.categoria?.id ?? null,
-      subcategoria_id: m?.subcategoria_id ?? m?.subcategoria?.id ?? null,
+      categoria_id: m?.subcategoria?.categoria?.id ?? null,
+      subcategoria_id: m?.subcategoria?.id ?? null,
       escopo: m?.escopo ?? "COMP",
       descricao: m?.descricao ?? "",
       valor_total: m?.valor_total ?? "",
-      competencia: m?.competencia ?? "",
-      data_vencimento: m?.data_vencimento ?? "",
-      pagador_id: m?.pagador_id ?? m?.pagador?.id ?? null,
+      competencia: m?.competencia,
+      data_vencimento: m?.data_vencimento,
+      pagador_id: m?.pagador?.id ?? null,
       status: m?.status ?? "PENDENTE",
-      data_pagamento: m?.data_pagamento ?? "",
-      dono_pessoal_id: m?.dono_pessoal_id ?? m?.dono_pessoal?.id ?? null,
-      usar_cartao: !!(m?.cartao_id ?? m?.cartao?.id),
-      cartao_id: m?.cartao_id ?? m?.cartao?.id ?? null,
-      parcelas_total: m?.parcelas_total ?? 1,
-      parcela_numero: m?.parcela_numero ?? 1,
+      data_pagamento: m?.data_pagamento ?? null,
+      dono_pessoal_id: m?.dono_pessoal?.id ?? null,
+      usar_cartao: false,
+      cartao_id: null,
+      parcelas_total: 1,
     });
-
-    // garante categoria_id pela subcategoria, se necessário
-    if (!local.categoria_id && local.subcategoria_id) {
+    if (!local.categoria_id && m?.subcategoria_id) {
       const sub = subcategoriasNormalizadas.value.find(
-        (s) => s.id === local.subcategoria_id
+        (s) => s.id === m.subcategoria_id
       );
-      local.categoria_id = sub?.categoria_id ?? null;
-    }
-
-    // Se já vier com cartão, podemos sugerir vencimento se não houver
-    if (local.usar_cartao && !local.data_vencimento) {
-      applyCardDueDate();
+      if (sub) local.categoria_id = sub.categoria_id;
     }
   },
   { immediate: true, deep: true }
 );
 
-/** Ao trocar a categoria, invalida subcategoria fora do grupo */
 function onCategoriaChange() {
-  const match = subcategoriasNormalizadas.value.find(
+  const sub = subcategoriasNormalizadas.value.find(
     (s) => s.id === local.subcategoria_id
   );
-  if (!match || match.categoria_id !== local.categoria_id) {
+  if (sub && sub.categoria_id !== local.categoria_id) {
     local.subcategoria_id = null;
   }
 }
 
-/** Se status deixar de ser PAGO, limpa data_pagamento */
 watch(
   () => local.status,
   (st) => {
-    if (st !== "PAGO") {
-      local.data_pagamento = "";
-    }
+    if (st !== "PAGO") local.data_pagamento = null;
   }
 );
-
-/** Se escopo virar COMP, limpa dono_pessoal_id (regra do backend) */
 watch(
   () => local.escopo,
   (esc) => {
-    if (esc === "COMP") {
-      local.dono_pessoal_id = null;
-    }
+    if (esc === "COMP") local.dono_pessoal_id = null;
   }
 );
-
-/** Se desmarcar "Compra no cartão", limpa dados relacionados */
 watch(
   () => local.usar_cartao,
   (on) => {
     if (!on) {
       local.cartao_id = null;
       local.parcelas_total = 1;
-      local.parcela_numero = 1;
       showNewCard.value = false;
-      newCardName.value = "";
-      newCardDueDay.value = null;
-      // NÃO mexemos em competencia
-      // Também não alteramos data_vencimento automaticamente aqui
-    } else {
-      // ligou: se já houver cartão selecionado, sugere vencimento
-      applyCardDueDate();
     }
   }
 );
 
-/** Quando trocar o cartão, sugere data de vencimento (sem mexer na competência) */
-watch(
-  () => local.cartao_id,
-  () => {
-    applyCardDueDate();
-  }
-);
-
-/** Calcula a próxima data de vencimento pelo dia do cartão, a partir de HOJE */
-function nextDueDateFromToday(dueDay) {
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = today.getMonth(); // 0..11
-  const thisMonthDue = new Date(Date.UTC(y, m, Math.min(dueDay, 28))); // evita overflow em meses curtos
-  if (today.getUTCDate() <= dueDay) {
-    return isoDate(y, m, dueDay);
-  } else {
-    // próximo mês
-    const next = new Date(Date.UTC(y, m + 1, 1));
-    return isoDate(next.getUTCFullYear(), next.getUTCMonth(), dueDay);
-  }
+// =================== FUNÇÕES DE DATA CORRIGIDAS ===================
+function toIsoDate(dateValue) {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime())) return null;
+  // Ajusta para o fuso horário local para garantir que a data não mude
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
 }
 
-/** Aplica vencimento baseado no cartão, sem tocar na competencia */
-function applyCardDueDate() {
-  if (!local.usar_cartao) return;
-  const c = cartaoSelecionado.value;
-  if (!c || !c.dia_vencimento) return;
-  // Só sugere se o campo estiver vazio, para não sobrescrever edição manual
-  if (!local.data_vencimento) {
-    local.data_vencimento = nextDueDateFromToday(Number(c.dia_vencimento));
-  }
-}
+function formatBr(dateValue) {
+  if (!dateValue) return "";
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime())) return "";
 
-/** Helpers de data */
-function isoDate(year, monthZeroBased, day) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${year}-${pad(monthZeroBased + 1)}-${pad(Math.min(day, 28))}`;
-}
+  // Adiciona o offset do fuso horário para exibir a data local correta
+  date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
 
-function toIsoDate(value) {
-  if (!value) return value;
-  if (typeof value === "string") {
-    return value; // assume "YYYY-MM-DD"
-  }
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
 }
+// =================================================================
 
-/** ISO -> dd/mm/yyyy */
-function formatBr(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
-
-/** Emite payload limpo para o backend */
 function emitSave() {
   const payload = { ...local };
 
-  // backend não precisa receber categoria_id
   delete payload.categoria_id;
 
-  // se não for compra no cartão, remover campos de cartão do payload
-  if (!payload.usar_cartao) {
-    delete payload.cartao_id;
-    delete payload.parcelas_total;
-    delete payload.parcela_numero;
-  }
-  delete payload.usar_cartao;
-
-  // normaliza datas
   payload.competencia = toIsoDate(payload.competencia);
   payload.data_vencimento = toIsoDate(payload.data_vencimento);
-  if (payload.data_pagamento) {
-    payload.data_pagamento = toIsoDate(payload.data_pagamento);
-  }
+  payload.data_pagamento = toIsoDate(payload.data_pagamento);
 
-  // regra: se COMP, não envia dono_pessoal_id
-  if (payload.escopo === "COMP") {
-    delete payload.dono_pessoal_id;
-  }
-
-  // remove vazios/nulos
   Object.keys(payload).forEach((k) => {
     if (payload[k] === "" || payload[k] === null) delete payload[k];
   });

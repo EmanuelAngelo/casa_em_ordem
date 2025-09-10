@@ -1,4 +1,6 @@
 from datetime import date
+from itertools import chain # Import para combinar listas
+from operator import attrgetter # Import para ordenar objetos
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -31,6 +33,7 @@ from .serializers import (
     CompraCartaoSerializer,
     RegisterSerializer,
     CategoriaSerializer,
+    ResumoLancamentoSerializer,
     SubcategoriaSerializer,
     LancamentoSerializer,
     DespesaModeloSerializer,
@@ -217,7 +220,8 @@ class LancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ["descricao", "subcategoria__nome", "subcategoria__categoria__nome"]
-    filterset_fields = ["status", "escopo", "subcategoria", "subcategoria__categoria", "competencia"]
+    # CORREÇÃO: Adicionado 'compra_cartao' para permitir a filtragem das parcelas.
+    filterset_fields = ["status", "escopo", "subcategoria", "subcategoria__categoria", "competencia", "compra_cartao"]
 
     def get_queryset(self):
         casal = self.get_casal_usuario()
@@ -228,29 +232,32 @@ class LancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
         serializer.save(casal=casal, criado_por=self.request.user)
 
     def perform_update(self, serializer):
-        # casal não está no payload (read_only), então não muda
         serializer.save()
 
-    # POST /api/lancamentos/{id}/quitar/
     @action(detail=True, methods=["post"], url_path="quitar")
     def quitar(self, request, pk=None):
         lanc = self.get_object()
         try:
-            quitar_lancamento(lanc, request.user)
+            # CORREÇÃO: Usando argumentos nomeados para passar o pagador corretamente.
+            quitar_lancamento(lancamento=lanc, pagador=request.user)
             return Response({"detail": "Lançamento quitado com sucesso."})
         except Exception as e:
             return Response({"detail": str(e)}, status=400)
 
-    # POST /api/lancamentos/gerar/?competencia=YYYY-MM-01
     @action(detail=False, methods=["post"], url_path="gerar")
     def gerar(self, request):
-        competencia = request.query_params.get("competencia")
-        if not competencia:
+        competencia_str = request.query_params.get("competencia")
+        if not competencia_str:
             return Response({"detail": "Informe ?competencia=YYYY-MM-01"}, status=400)
-        casal = self.get_casal_usuario()
+        
         try:
-            total = gerar_lancamentos_competencia(casal, competencia)
-            return Response({"detail": f"{total} lançamentos gerados para {competencia}."})
+            competencia = date.fromisoformat(competencia_str)
+            casal = self.get_casal_usuario()
+            lancamentos_criados = gerar_lancamentos_competencia(casal, competencia, request.user)
+            total = len(lancamentos_criados)
+            return Response({"detail": f"{total} lançamentos gerados para {competencia_str}."})
+        except ValueError:
+            return Response({"detail": "Formato de data inválido. Use YYYY-MM-DD."}, status=400)
         except Exception as e:
             return Response({"detail": str(e)}, status=400)
 
@@ -292,3 +299,37 @@ class CompraCartaoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         compra = serializer.save(casal=self.get_casal_usuario())
         gerar_lancamentos_da_compra(compra, criado_por=self.request.user)
+
+class ResumoLancamentosView(APIView):
+    """
+    Retorna uma lista combinada e ordenada de:
+    1. Compras de Cartão (agrupadas como um único item)
+    2. Lançamentos únicos (que não são parte de uma compra de cartão)
+    """
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal]
+
+    def get(self, request, *args, **kwargs):
+        casal = get_casal_ativo_do_usuario(request.user)
+        if not casal:
+            return Response([], status=status.HTTP_200_OK)
+
+        # 1. Pega todas as compras de cartão
+        compras = CompraCartao.objects.filter(casal=casal).select_related("subcategoria", "subcategoria__categoria")
+
+        # 2. Pega todos os lançamentos que NÃO estão associados a uma compra
+        lancamentos_unicos = Lancamento.objects.filter(
+            casal=casal,
+            compra_cartao__isnull=True
+        ).select_related("subcategoria", "subcategoria__categoria")
+
+        # 3. Combina as duas listas e ordena pela data de competência (ou primeira competência)
+        # O 'key' usa o primeiro atributo que encontrar no objeto para ordenar
+        combined_list = sorted(
+            chain(compras, lancamentos_unicos),
+            key=lambda x: x.competencia if isinstance(x, Lancamento) else x.primeira_competencia,
+            reverse=True
+        )
+        
+        # 4. Serializa a lista combinada usando o novo serializer
+        serializer = ResumoLancamentoSerializer(combined_list, many=True)
+        return Response(serializer.data)

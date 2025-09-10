@@ -173,11 +173,12 @@ class CompraCartaoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CompraCartao
+        # CORREÇÃO: Removidos os campos "compra_cartao", "parcela_numero" e o "parcelas_total" duplicado.
         fields = [
             "id", "casal", "cartao", "cartao_id", "descricao",
             "subcategoria", "subcategoria_id", "escopo", "dono_pessoal", "dono_pessoal_id",
             "valor_total", "parcelas_total", "primeira_competencia", "primeiro_vencimento",
-            "pagador", "pagador_id", "compra_cartao", "parcela_numero", "parcelas_total", "criado_em", "atualizado_em"
+            "pagador", "pagador_id", "criado_em", "atualizado_em"
         ]
         read_only_fields = ("casal", "criado_em", "atualizado_em")
 
@@ -328,3 +329,54 @@ class DespesaModeloSerializer(serializers.ModelSerializer):
         if escopo == EscopoDespesa.PESSOAL and regra != RegraRateio.IGUAL:
             data["regra_rateio"] = RegraRateio.IGUAL
         return data
+
+
+class ResumoLancamentoSerializer(serializers.Serializer):
+    """
+    Serializer unificado para exibir tanto Lançamentos únicos
+    quanto Compras parceladas de forma agregada.
+    """
+    id = serializers.IntegerField()
+    type = serializers.CharField() # 'lancamento' ou 'compra'
+    descricao = serializers.CharField()
+    subcategoria = SubcategoriaSerializer(read_only=True)
+    escopo = serializers.CharField()
+    
+    # Campos que podem vir de ambos os modelos
+    valor_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    competencia = serializers.DateField(required=False) # Usado para ordenação
+    data_vencimento = serializers.DateField(required=False)
+    
+    # Campos específicos
+    parcelas_total = serializers.IntegerField(required=False)
+    status = serializers.CharField(required=False)
+
+    def to_representation(self, instance):
+        if isinstance(instance, Lancamento):
+            return {
+                'id': instance.id,
+                'type': 'lancamento',
+                'descricao': instance.descricao,
+                'subcategoria': SubcategoriaSerializer(instance.subcategoria).data,
+                'escopo': instance.escopo,
+                'valor_total': instance.valor_total,
+                'parcelas_total': 1,
+                'competencia': instance.competencia,
+                'data_vencimento': instance.data_vencimento,
+                'status': instance.status,
+            }
+        elif isinstance(instance, CompraCartao):
+            # Para compras, usamos a primeira competência/vencimento para fins de ordenação
+            return {
+                'id': instance.id,
+                'type': 'compra',
+                'descricao': instance.descricao,
+                'subcategoria': SubcategoriaSerializer(instance.subcategoria).data,
+                'escopo': instance.escopo,
+                'valor_total': instance.valor_total,
+                'parcelas_total': instance.parcelas_total,
+                'competencia': instance.primeira_competencia,
+                'data_vencimento': instance.primeiro_vencimento,
+                'status': 'PARCELADA', # Um status customizado para o frontend
+            }
+        return super().to_representation(instance)

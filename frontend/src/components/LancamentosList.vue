@@ -99,7 +99,7 @@ const headers = [
   { title: "Escopo", key: "escopo" },
   { title: "Competência", key: "competencia" },
   { title: "Vencimento", key: "data_vencimento" },
-  { title: "Parc.", key: "parcela", align: "center", sortable: false },
+  // { title: "Parc.", key: "parcela", align: "center", sortable: false },
   { title: "Valor", key: "valor_total", align: "end" },
   { title: "Status", key: "status" },
   { title: "Ações", key: "actions", sortable: false, align: "end" },

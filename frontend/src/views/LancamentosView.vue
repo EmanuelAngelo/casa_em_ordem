@@ -4,7 +4,7 @@
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Lançamentos</v-toolbar-title>
         <v-spacer />
-        <v-btn icon @click="fetchLancamentos">
+        <v-btn icon @click="fetchAllData">
           <v-icon>mdi-refresh</v-icon>
         </v-btn>
         <v-btn prepend-icon="mdi-plus" @click="openForm()">
@@ -13,19 +13,19 @@
       </v-toolbar>
 
       <v-card-text>
-        <LancamentosList
-          :items="lancamentos"
+        <ComprasResumoList
+          :items="lancamentosResumo"
           :loading="loading"
           @edit="openForm"
-          @delete="confirmDelete"
           @quit="quitLancamento"
+          @view-details="openDetailsDialog"
         />
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" persistent max-width="720px">
+    <v-dialog v-model="formDialog" persistent max-width="720px">
       <LancamentosForm
-        :model="editedLancamento"
+        :model="editedItem"
         :categorias="categorias"
         :subcategorias="subcategorias"
         :membros="membrosOptions"
@@ -33,21 +33,33 @@
         :escopo-options="escopoOptions"
         :cartoes="cartoes"
         :saving="saving"
-        @close="dialog = false"
-        @save="saveLancamento"
+        @close="formDialog = false"
+        @save="saveItem"
       />
     </v-dialog>
+
+    <!-- --- MUDANÇA AQUI: Adicionando a ref --- -->
+    <ParcelasDetailDialog
+      ref="parcelasDialogRef"
+      :show="detailsDialog"
+      :compra="selectedCompra"
+      @close="detailsDialog = false"
+      @edit-parcela="openForm"
+      @delete-parcela="confirmDelete"
+      @quit-parcela="quitLancamento"
+    />
 
     <v-dialog v-model="deleteDialog" persistent max-width="400px">
       <v-card>
         <v-card-title class="text-h5">Confirmar Exclusão</v-card-title>
         <v-card-text>
-          Tem certeza que deseja excluir este lançamento?
+          Tem certeza que deseja excluir esta parcela? Esta ação não pode ser
+          desfeita.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="deleteDialog = false">Cancelar</v-btn>
-          <v-btn color="red-darken-1" @click="deleteLancamentoConfirmed">
+          <v-btn color="red-darken-1" @click="deleteItemConfirmed">
             Excluir
           </v-btn>
         </v-card-actions>
@@ -58,9 +70,9 @@
       <v-card>
         <v-card-title class="text-h5 bg-red-darken-2">
           <v-icon start icon="mdi-alert-circle-outline" />
-          Operação Bloqueada
+          Operação Falhou
         </v-card-title>
-        <v-card-text class="py-4 text-body-1">
+        <v-card-text class="py-4 text-body-1" style="white-space: pre-wrap">
           {{ errorMessage }}
         </v-card-text>
         <v-card-actions>
@@ -81,23 +93,28 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import axios from "@/api/axios";
-import LancamentosList from "@/components/LancamentosList.vue";
 import LancamentosForm from "@/components/LancamentosForm.vue";
+import ComprasResumoList from "@/components/ComprasResumoList.vue";
+import ParcelasDetailDialog from "@/components/ParcelasDetailDialog.vue";
 
-const lancamentos = ref([]);
+// --- MUDANÇA AQUI: Criando a ref para o dialog ---
+const parcelasDialogRef = ref(null);
+
+const lancamentosResumo = ref([]);
 const categorias = ref([]);
-const subcategorias = ref([]); // << mantém
+const subcategorias = ref([]);
 const membrosOptions = ref([]);
-
-const cartoes = ref([]); // << NOVO
+const cartoes = ref([]);
 
 const loading = ref(false);
 const saving = ref(false);
-const dialog = ref(false);
+const formDialog = ref(false);
 const deleteDialog = ref(false);
+const detailsDialog = ref(false);
 
-const editedLancamento = ref({});
-const lancamentoToDelete = ref(null);
+const editedItem = ref({});
+const itemToDelete = ref(null);
+const selectedCompra = ref(null);
 
 const errorDialog = ref(false);
 const errorMessage = ref("");
@@ -112,67 +129,74 @@ const escopoOptions = [
   { label: "Pessoal", value: "PESS" },
 ];
 
-const defaultLancamento = {
-  categoria_id: null,
+const defaultItem = {
+  id: null,
   subcategoria_id: null,
   escopo: "COMP",
   descricao: "",
   valor_total: "",
-  competencia: new Date().toISOString().slice(0, 7) + "-01",
-  data_vencimento: new Date().toISOString().slice(0, 7) + "-01",
+  competencia: new Date(new Date().setDate(1)).toISOString().slice(0, 10),
+  data_vencimento: new Date().toISOString().slice(0, 10),
   pagador_id: null,
   status: "PENDENTE",
-  data_pagamento: "",
+  data_pagamento: null,
   dono_pessoal_id: null,
-
-  // Campos do cartão (apenas para criação; edição de parcela segue fluxo normal)
-  compra_cartao: false,
-  cartao_id: null,
-  parcelas_total: 1,
-  primeira_competencia: "",
-  primeiro_vencimento: "",
 };
 
-onMounted(async () => {
+onMounted(fetchAllData);
+
+async function fetchAllData() {
+  loading.value = true;
   await Promise.all([
+    fetchLancamentosResumo(),
     fetchCategorias(),
     fetchSubcategorias(),
     fetchMembros(),
     fetchCartoes(),
   ]);
-  await fetchLancamentos();
-});
+  loading.value = false;
+}
 
-async function fetchLancamentos() {
-  loading.value = true;
+async function fetchLancamentosResumo() {
   try {
-    const resp = await axios.get("/lancamentos/");
-    lancamentos.value = resp.data?.results ?? resp.data ?? [];
+    const { data } = await axios.get("/lancamentos-resumo/");
+    lancamentosResumo.value = data ?? [];
   } catch (error) {
-    console.error("Erro ao buscar lançamentos:", error);
-    errorMessage.value = "Não foi possível carregar os lançamentos.";
-    errorDialog.value = true;
-  } finally {
-    loading.value = false;
+    handleApiError(error, "Não foi possível carregar os lançamentos.");
   }
 }
 
 async function fetchCategorias() {
-  const { data } = await axios.get("/categorias/");
-  categorias.value = data?.results ?? data ?? [];
+  try {
+    const { data } = await axios.get("/categorias/");
+    categorias.value = data?.results ?? data ?? [];
+  } catch (error) {
+    handleApiError(error, "Não foi possível carregar as categorias.");
+  }
 }
 
 async function fetchSubcategorias() {
-  const { data } = await axios.get("/subcategorias/");
-  subcategorias.value = data?.results ?? data ?? [];
+  try {
+    const { data } = await axios.get("/subcategorias/");
+    subcategorias.value = data?.results ?? data ?? [];
+  } catch (error) {
+    handleApiError(error, "Não foi possível carregar as subcategorias.");
+  }
 }
 
 async function fetchMembros() {
-  const { data } = await axios.get("/casais/meu/");
-  membrosOptions.value = (data?.membros || []).map((m) => ({
-    label: m.usuario.first_name || m.usuario.username,
-    value: m.usuario.id,
-  }));
+  try {
+    const { data } = await axios.get("/casais/meu/");
+    membrosOptions.value = (data?.membros || []).map((m) => ({
+      label: m.usuario.first_name || m.usuario.username,
+      value: m.usuario.id,
+    }));
+    if (membrosOptions.value.length > 0) {
+      defaultItem.pagador_id = membrosOptions.value[0].value;
+    }
+  } catch (error) {
+    handleApiError(error, "Não foi possível carregar dados do casal.");
+  }
 }
 
 async function fetchCartoes() {
@@ -180,107 +204,101 @@ async function fetchCartoes() {
     const { data } = await axios.get("/cartoes/");
     cartoes.value = data?.results ?? data ?? [];
   } catch (e) {
-    // se ainda não existir o endpoint/cartões, só segue sem travar a tela
     cartoes.value = [];
+    console.error("Não foi possível carregar os cartões.", e);
   }
 }
 
 function openForm(item = null) {
-  if (item) {
-    const sub = item.subcategoria || null;
-    const catId = sub?.categoria?.id ?? null;
-
-    editedLancamento.value = {
-      id: item.id,
-      categoria_id: catId, // para filtrar o select
-      subcategoria_id: sub?.id ?? null, // enviado ao backend
-      escopo: item.escopo,
-      descricao: item.descricao,
-      valor_total: String(item.valor_total ?? ""),
-      competencia: item.competencia,
-      data_vencimento: item.data_vencimento,
-      pagador_id: item.pagador?.id ?? null,
-      status: item.status,
-      data_pagamento: item.data_pagamento || "",
-      dono_pessoal_id: item.dono_pessoal?.id ?? null,
-
-      // em edição de lançamento existente, não ativamos “compra_cartao”
-      compra_cartao: false,
-      cartao_id: null,
-      parcelas_total: 1,
-      primeira_competencia: "",
-      primeiro_vencimento: "",
-    };
-  } else {
-    editedLancamento.value = {
-      ...defaultLancamento,
-      pagador_id: membrosOptions.value?.[0]?.value || null,
-    };
-  }
-  dialog.value = true;
+  editedItem.value = item ? { ...item } : { ...defaultItem };
+  formDialog.value = true;
 }
 
-async function saveLancamento(payload) {
+async function saveItem(payload) {
   saving.value = true;
   try {
-    const body = { ...payload };
-
-    // remove vazios e campos só de UI
-    Object.keys(body).forEach((k) => {
-      if (body[k] === "" || body[k] === null) delete body[k];
-    });
-    delete body.categoria_id; // backend não precisa disso
-
-    if (body.id) {
-      await axios.patch(`/lancamentos/${body.id}/`, body);
+    if (payload.usar_cartao && !payload.id) {
+      const compraPayload = {
+        cartao_id: payload.cartao_id,
+        descricao: payload.descricao,
+        subcategoria_id: payload.subcategoria_id,
+        escopo: payload.escopo,
+        dono_pessoal_id: payload.dono_pessoal_id,
+        valor_total: payload.valor_total,
+        parcelas_total: payload.parcelas_total,
+        primeira_competencia: payload.competencia,
+        primeiro_vencimento: payload.data_vencimento,
+        pagador_id: payload.pagador_id,
+      };
+      Object.keys(compraPayload).forEach((key) => {
+        if (compraPayload[key] === null || compraPayload[key] === undefined) {
+          delete compraPayload[key];
+        }
+      });
+      await axios.post("/compras-cartao/", compraPayload);
     } else {
-      // se for compra no cartão e você já tiver implementado um endpoint específico,
-      // aqui seria algo como POST /lancamentos/cartao/
-      // por enquanto, envia no /lancamentos/ normal (o backend ignora extras se não suportar)
-      await axios.post("/lancamentos/", body);
+      const url = payload.id ? `/lancamentos/${payload.id}/` : "/lancamentos/";
+      const method = payload.id ? "patch" : "post";
+      await axios[method](url, payload);
     }
-
-    dialog.value = false;
-    await fetchLancamentos();
+    formDialog.value = false;
+    await fetchAllData(); // Recarrega todos os dados para refletir mudanças
   } catch (error) {
-    console.error("Erro ao salvar lançamento:", error);
-    errorMessage.value = error.response?.data
-      ? JSON.stringify(error.response.data)
-      : "Não foi possível salvar o lançamento.";
-    errorDialog.value = true;
+    handleApiError(error, "Não foi possível salvar.");
   } finally {
     saving.value = false;
   }
 }
 
 function confirmDelete(item) {
-  lancamentoToDelete.value = item;
+  itemToDelete.value = item;
   deleteDialog.value = true;
 }
 
-async function deleteLancamentoConfirmed() {
+async function deleteItemConfirmed() {
   try {
-    await axios.delete(`/lancamentos/${lancamentoToDelete.value.id}/`);
+    await axios.delete(`/lancamentos/${itemToDelete.value.id}/`);
     deleteDialog.value = false;
-    await fetchLancamentos();
+    await fetchAllData();
   } catch (error) {
-    deleteDialog.value = false;
-    errorMessage.value =
-      error.response?.data?.detail ||
-      "Ocorreu um erro ao excluir o lançamento.";
-    errorDialog.value = true;
-    console.error("Erro ao excluir lançamento:", error);
+    handleApiError(error, "Erro ao excluir o item.");
   }
 }
 
+// --- MUDANÇA AQUI: Função de quitar atualizada ---
 async function quitLancamento(item) {
   try {
     await axios.post(`/lancamentos/${item.id}/quitar/`, {});
+
+    // Atualiza a lista principal de resumo
+    await fetchLancamentosResumo();
+
+    // Se o dialog de detalhes estiver aberto, chama sua função interna de refresh
+    if (detailsDialog.value && parcelasDialogRef.value) {
+      await parcelasDialogRef.value.fetchParcelas();
+    }
   } catch (error) {
-    errorMessage.value = "Não foi possível quitar o lançamento.";
-    errorDialog.value = true;
-  } finally {
-    await fetchLancamentos();
+    handleApiError(error, "Não foi possível quitar a parcela.");
   }
+}
+
+function openDetailsDialog(compra) {
+  selectedCompra.value = compra;
+  detailsDialog.value = true;
+}
+
+function handleApiError(error, defaultMessage) {
+  const responseData = error.response?.data;
+  if (responseData && typeof responseData === "object") {
+    errorMessage.value = Object.entries(responseData)
+      .map(
+        ([key, value]) =>
+          `${key}: ${Array.isArray(value) ? value.join(", ") : value}`
+      )
+      .join("\n");
+  } else {
+    errorMessage.value = responseData || defaultMessage;
+  }
+  errorDialog.value = true;
 }
 </script>

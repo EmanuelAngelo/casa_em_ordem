@@ -1,6 +1,6 @@
 from datetime import date
 from dateutil.relativedelta import relativedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
@@ -146,34 +146,54 @@ def quitar_lancamento(lancamento: Lancamento, data_pagamento=None, pagador: User
     return lancamento
 
 
+# --- FUNÇÃO CORRIGIDA ---
 @transaction.atomic
 def gerar_lancamentos_da_compra(compra: "CompraCartao", criado_por):
     """
-    Cria N Lancamentos (parcelas) a partir de CompraCartao.
+    Cria N Lancamentos (parcelas) a partir de CompraCartao, garantindo
+    que a soma das parcelas seja igual ao valor total.
     """
-    valor_parcela = (compra.valor_total / compra.parcelas_total).quantize(compra.valor_total.as_tuple())
+    valor_total_compra = compra.valor_total
+    total_parcelas = compra.parcelas_total
+    
+    # Calcula o valor padrão da parcela, arredondando para baixo
+    valor_parcela_padrao = (valor_total_compra / total_parcelas).quantize(
+        Decimal("0.01"), rounding=ROUND_DOWN
+    )
+    
+    # Gera uma lista com o valor de cada parcela
+    valores_parcelas = [valor_parcela_padrao] * total_parcelas
+    
+    # Calcula a diferença de arredondamento
+    soma_arredondada = sum(valores_parcelas)
+    diferenca = valor_total_compra - soma_arredondada
+    
+    # Adiciona a diferença à última parcela para garantir a soma exata
+    if diferenca > 0:
+        valores_parcelas[-1] += diferenca
+
     competencia = compra.primeira_competencia
     venc = compra.primeiro_vencimento
 
-    for i in range(1, compra.parcelas_total + 1):
+    for i in range(total_parcelas):
         Lancamento.objects.create(
             casal=compra.casal,
             despesa_modelo=None,
             subcategoria=compra.subcategoria,
             escopo=compra.escopo,
             dono_pessoal=compra.dono_pessoal,
-            descricao=f"{compra.descricao} ({i}/{compra.parcelas_total})",
+            descricao=f"{compra.descricao or 'Compra no cartão'} ({i + 1}/{total_parcelas})",
             competencia=competencia,
             data_vencimento=venc,
-            valor_total=valor_parcela,
+            valor_total=valores_parcelas[i],  # Usa o valor calculado para esta parcela
             status=StatusLancamento.PENDENTE,
             data_pagamento=None,
             pagador=compra.pagador,
             criado_por=criado_por,
             compra_cartao=compra,
-            parcela_numero=i,
-            parcelas_total=compra.parcelas_total,
+            parcela_numero=i + 1,
+            parcelas_total=total_parcelas,
         )
-        # próxima parcela (+1 mês)
+        # Avança para a competência e vencimento do próximo mês
         competencia = (competencia + relativedelta(months=+1)).replace(day=1)
         venc = venc + relativedelta(months=+1)
