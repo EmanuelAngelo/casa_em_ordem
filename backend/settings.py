@@ -134,7 +134,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
     # --- VERSÃO CORRIGIDA PARA O VERCEL ---
-    "https://gastos-a-dois.vercel.app/",
+    "https://gastos-a-dois.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
