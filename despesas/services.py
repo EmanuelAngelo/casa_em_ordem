@@ -7,10 +7,44 @@ from django.contrib.auth import get_user_model
 
 from .models import (
     Casal, CompraCartao, MembroCasal, DespesaModelo, Lancamento, RateioLancamento,
-    EscopoDespesa, RegraRateio, StatusLancamento, RegraRateioPadrao
+    EscopoDespesa, RegraRateio, StatusLancamento, RegraRateioPadrao, Categoria, Subcategoria
 )
 
 User = get_user_model()
+
+# --- NOVA FUNÇÃO PARA CRIAR CATEGORIAS PADRÃO ---
+
+CATEGORIAS_PADRAO = {
+    "Moradia": ["Aluguel", "Condomínio", "Energia", "Água", "Internet", "Gás", "Manutenção"],
+    "Alimentação": ["Supermercado", "Restaurante/Lanchonete", "Delivery"],
+    "Transporte": ["Combustível", "Uber/99", "Manutenção do carro", "Transporte público"],
+    "Saúde": ["Plano de saúde", "Farmácia", "Consultas/Exames"],
+    "Lazer e Assinaturas": ["Streaming (Netflix, etc)", "Academia", "Viagens", "Passeios"],
+    "Educação": ["Cursos", "Livros/Material", "Mensalidades"],
+    "Finanças": ["Fatura do Cartão", "Empréstimos", "Investimentos", "Seguros"],
+    "Compras Pessoais": ["Roupas e Acessórios", "Cosméticos", "Eletrônicos", "Presentes"],
+}
+
+def criar_categorias_padrao_para_casal(casal: Casal):
+    """
+    Cria um conjunto de categorias e subcategorias padrão para um novo casal.
+    Esta função é chamada durante o registro de um casal.
+    """
+    for cat_nome, sub_nomes in CATEGORIAS_PADRAO.items():
+        # Cria a categoria principal associada ao casal
+        categoria = Categoria.objects.create(
+            casal=casal,
+            nome=cat_nome,
+            ativa=True
+        )
+        # Cria as subcategorias vinculadas
+        for sub_nome in sub_nomes:
+            Subcategoria.objects.create(
+                categoria=categoria,
+                nome=sub_nome,
+                ativa=True
+            )
+    return True
 
 
 def _membros_ativos_ids(casal: Casal) -> list[int]:

@@ -12,6 +12,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.core.mail import send_mail
+from backend import settings
 
 from .models import (
     CartaoCredito,
@@ -48,6 +50,7 @@ from .serializers import (
 )
 from .services import criar_rateios_para_lancamento, gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
 from .utils import get_casal_ativo_do_usuario, assert_user_pertence_ao_casal
+from despesas import serializers
 
 User = get_user_model()
 
@@ -85,7 +88,6 @@ class CasalExtrasViewSet(viewsets.ViewSet):
         if not casal:
             return Response({"detail": "Usuário não possui casal ativo."}, status=400)
 
-        # Regra: no máximo 2 membros
         if casal.membros.filter(ativo=True).count() >= 2:
             return Response({"detail": "Este casal já possui 2 membros ativos."}, status=409)
 
@@ -94,7 +96,6 @@ class CasalExtrasViewSet(viewsets.ViewSet):
         except User.DoesNotExist:
             return Response({"detail": "Usuário não encontrado."}, status=404)
 
-        # Verifica se o user já tem vínculo ativo
         if MembroCasal.objects.filter(usuario=user, ativo=True).exists():
             return Response({"detail": "Este usuário já está vinculado a um casal ativo."}, status=409)
 
@@ -411,3 +412,91 @@ class ChangePasswordView(APIView):
         user.save()
 
         return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
+
+
+# class ConviteViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
+#     """
+#     ViewSet para criar, listar e aceitar convites.
+#     """
+#     serializer_class = ConviteCreateSerializer
+#     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal]
+
+#     def get_queryset(self):
+#         # Mostra apenas os convites pendentes do casal do usuário
+#         casal = self.get_casal_usuario()
+#         return Convite.objects.filter(casal_origem=casal, status=StatusConvite.PENDENTE)
+
+#     def perform_create(self, serializer):
+#         casal = self.get_casal_usuario()
+#         remetente = self.request.user
+#         email_convidado = serializer.validated_data['email_convidado']
+
+#         # Regras de negócio
+#         if casal.membros.filter(ativo=True).count() >= 2:
+#             raise serializers.ValidationError("Este casal já possui 2 membros ativos.")
+#         if MembroCasal.objects.filter(usuario__email=email_convidado, ativo=True).exists():
+#             raise serializers.ValidationError("Este e-mail já pertence a um casal ativo.")
+
+#         # Cria o convite
+#         convite = serializer.save(
+#             casal_origem=casal,
+#             remetente=remetente,
+#             email_convidado=email_convidado
+#         )
+
+#         # Envia o e-mail
+#         url_aceite = f"http://localhost:3000/aceitar-convite?token={convite.token}" # Mude o host se necessário
+#         send_mail(
+#             subject=f"Você foi convidado para o casal '{casal.nome}'",
+#             message=(
+#                 f"Olá!\n\n"
+#                 f"{remetente.get_full_name() or remetente.username} convidou você para se juntar ao casal '{casal.nome}' no app Gastos a Dois.\n\n"
+#                 f"Para aceitar, clique no link abaixo:\n"
+#                 f"{url_aceite}\n\n"
+#                 f"Se você não esperava este convite, por favor, ignore este e-mail."
+#             ),
+#             from_email=settings.DEFAULT_FROM_EMAIL,
+#             recipient_list=[email_convidado],
+#             fail_silently=False,
+#         )
+
+#     # Endpoint público para buscar detalhes do convite pelo token
+#     @action(detail=False, methods=['get'], permission_classes=[AllowAny], url_path='info/(?P<token>[^/.]+)')
+#     def info(self, request, token=None):
+#         try:
+#             convite = Convite.objects.get(token=token, status=StatusConvite.PENDENTE)
+#             return Response(ConvitePublicSerializer(convite).data)
+#         except Convite.DoesNotExist:
+#             return Response({"detail": "Convite inválido ou expirado."}, status=status.HTTP_404_NOT_FOUND)
+
+#     # Endpoint para o usuário logado aceitar o convite
+#     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='aceitar')
+#     def aceitar(self, request):
+#         serializer = AceitarConviteSerializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         token = serializer.validated_data['token']
+#         usuario_aceitando = request.user
+
+#         try:
+#             convite = Convite.objects.get(token=token, status=StatusConvite.PENDENTE)
+#         except Convite.DoesNotExist:
+#             raise serializers.ValidationError("Convite inválido ou expirado.")
+
+#         casal_destino = convite.casal_origem
+
+#         # Validações finais
+#         if MembroCasal.objects.filter(usuario=usuario_aceitando, ativo=True).exists():
+#             raise serializers.ValidationError("Você já faz parte de um casal ativo.")
+#         if casal_destino.membros.filter(ativo=True).count() >= 2:
+#             raise serializers.ValidationError("O casal de destino já está cheio.")
+
+#         # Tudo certo, adiciona o membro
+#         MembroCasal.objects.create(
+#             casal=casal_destino,
+#             usuario=usuario_aceitando,
+#             apelido=usuario_aceitando.first_name or usuario_aceitando.username,
+#             ativo=True
+#         )
+#         convite.status = StatusConvite.ACEITO
+#         convite.save()
+#         return Response({"detail": "Bem-vindo(a) ao casal!"})

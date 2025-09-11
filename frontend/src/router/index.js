@@ -11,6 +11,7 @@ const MeuCasal = () => import("@/views/MeuCasalView.vue");
 const DespesasModelo = () => import("@/views/DespesasModeloView.vue");
 const RelatorioFinanceiro = () =>
   import("../views/RelatorioFinanceiroView.vue");
+// const AceitarConvite = () => import("@/views/AceitarConviteView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
@@ -40,6 +41,12 @@ const router = createRouter({
       component: DespesasModelo,
       meta: { public: true, hideChrome: true },
     },
+    // {
+    //   path: "/aceitar-convite",
+    //   name: "aceitar-convite",
+    //   component: AceitarConvite,
+    //   meta: { public: true, hideChrome: true },
+    // },
     // AUTENTICADAS (com layout)
     {
       path: "/",

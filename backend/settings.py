@@ -176,3 +176,13 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
+
+# Adicione esta linha no final do arquivo para desenvolvimento
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# --- JWT (sem alterações) ---
+from datetime import timedelta
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}

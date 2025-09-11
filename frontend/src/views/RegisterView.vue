@@ -96,7 +96,7 @@ async function onSubmit() {
       nome_casal: nome_casal.value,
     });
 
-    // salva tokens e nome para AppBar
+    // Salva os tokens e o nome do usuário para a AppBar
     localStorage.setItem("accessToken", data.access);
     localStorage.setItem("refreshToken", data.refresh);
     localStorage.setItem(
@@ -104,15 +104,39 @@ async function onSubmit() {
       data.user?.first_name || data.user?.username || username.value
     );
 
-    // seta header Authorization imediatamente
+    // Seta o header de autorização para a próxima chamada (aceitar o convite)
     axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
 
-    // redireciona (já tem casal criado e vínculo feito)
+    // --- LÓGICA DE CONVITE ADICIONADA ---
+    const pendingToken = localStorage.getItem("pendingInvitationToken");
+    if (pendingToken) {
+      try {
+        await axios.post("/convites/aceitar/", { token: pendingToken });
+        localStorage.removeItem("pendingInvitationToken");
+      } catch (acceptError) {
+        console.error(
+          "Falha ao aceitar convite pendente após registro:",
+          acceptError
+        );
+        // Não impede o fluxo, o usuário já está logado. Ele pode aceitar o convite novamente se necessário.
+      }
+    }
+
+    // Redireciona para a página principal ou para a página de destino original
     const redirect = route.query.redirect || "/";
     router.replace(redirect);
   } catch (e) {
-    error.value =
-      e?.response?.data?.detail || "Não foi possível criar sua conta.";
+    // --- LÓGICA DE ERRO MELHORADA ---
+    const errors = e.response?.data;
+    if (errors && typeof errors === "object") {
+      // Constrói uma mensagem de erro a partir de todas as validações retornadas
+      const errorMessages = Object.entries(errors).map(([field, messages]) => {
+        return `${Array.isArray(messages) ? messages.join(" ") : messages}`;
+      });
+      error.value = errorMessages.join(" ");
+    } else {
+      error.value = "Não foi possível criar sua conta. Tente novamente.";
+    }
   } finally {
     loading.value = false;
   }

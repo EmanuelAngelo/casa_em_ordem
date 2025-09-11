@@ -36,7 +36,7 @@
               </v-btn>
             </v-form>
             <v-card-actions class="justify-center">
-              <!-- <RouterLink to="/register">Criar conta</RouterLink> -->
+              <RouterLink to="/register">Criar conta</RouterLink>
             </v-card-actions>
             <v-alert v-if="error" type="error" variant="tonal" class="mt-4">
               {{ error }}
@@ -74,6 +74,17 @@ async function onSubmit() {
     localStorage.setItem("accessToken", data.access);
     if (data.refresh) localStorage.setItem("refreshToken", data.refresh);
     axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
+
+    // --- LÓGICA DE CONVITE ADICIONADA ---
+    const pendingToken = localStorage.getItem("pendingInvitationToken");
+    if (pendingToken) {
+      try {
+        await axios.post("/convites/aceitar/", { token: pendingToken });
+        localStorage.removeItem("pendingInvitationToken");
+      } catch (acceptError) {
+        console.error("Falha ao aceitar convite pendente:", acceptError);
+      }
+    }
     router.replace(route.query.redirect || "/");
 
     // opcional: salva nome p/ AppBar

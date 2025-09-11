@@ -2,6 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from despesas.services import criar_categorias_padrao_para_casal
+
 from .models import (
     Casal,
     MembroCasal,
@@ -32,7 +34,7 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_username(self, v):
         if User.objects.filter(username=v).exists():
-            raise serializers.ValidationError("Usuário já existe.")
+            raise serializers.ValidationError({"username": "Este nome de usuário já existe."})
         return v
 
     def create(self, validated):
@@ -40,7 +42,7 @@ class RegisterSerializer(serializers.Serializer):
         username = validated["username"]
         email = validated.get("email", "")
         password = validated["password"]
-        nome_casal = validated.get("nome_casal") or (first_name or username)
+        nome_casal = validated.get("nome_casal")
 
         user = User.objects.create_user(
             username=username,
@@ -49,22 +51,22 @@ class RegisterSerializer(serializers.Serializer):
             first_name=first_name,
         )
 
-        casal = Casal.objects.create(nome=nome_casal or "")
-        MembroCasal.objects.create(
-            casal=casal,
-            usuario=user,
-            apelido=first_name or username,
-            ativo=True,
-        )
+        if nome_casal:
+            casal = Casal.objects.create(nome=nome_casal)
+            MembroCasal.objects.create(
+                casal=casal,
+                usuario=user,
+                apelido=first_name or username,
+                ativo=True,
+            )
+            # --- CHAMADA PARA O NOVO SERVIÇO AQUI ---
+            criar_categorias_padrao_para_casal(casal)
 
-        # Gera tokens JWT
         refresh = RefreshToken.for_user(user)
         return {
             "user": {
-                "id": user.id,
-                "username": user.username,
-                "first_name": user.first_name,
-                "email": user.email,
+                "id": user.id, "username": user.username,
+                "first_name": user.first_name, "email": user.email,
             },
             "access": str(refresh.access_token),
             "refresh": str(refresh),
@@ -391,3 +393,24 @@ class ChangePasswordSerializer(serializers.Serializer):
         if attrs['nova_senha'] != attrs['confirmacao_senha']:
             raise serializers.ValidationError({"confirmacao_senha": "As senhas não coincidem."})
         return attrs
+
+# class ConviteCreateSerializer(serializers.ModelSerializer):
+#     email_convidado = serializers.EmailField(write_only=True, required=True)
+
+#     class Meta:
+#         model = Convite
+#         fields = ["email_convidado"]
+
+
+# class ConvitePublicSerializer(serializers.ModelSerializer):
+#     """ Serializer para mostrar informações públicas de um convite. """
+#     remetente_nome = serializers.CharField(source='remetente.get_full_name', read_only=True)
+#     casal_nome = serializers.CharField(source='casal_origem.nome', read_only=True)
+
+#     class Meta:
+#         model = Convite
+#         fields = ['token', 'email_convidado', 'remetente_nome', 'casal_nome']
+
+
+# class AceitarConviteSerializer(serializers.Serializer):
+#     token = serializers.UUIDField(required=True)

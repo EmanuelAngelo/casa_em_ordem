@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.text import slugify
+import uuid
 
 User = get_user_model()
 
@@ -338,3 +339,26 @@ class RateioLancamento(CarimboTempo):
         if self.percentual is not None:
             return f"{base} ({self.percentual}% = R$ {self.valor})"
         return f"{base} (R$ {self.valor})"
+
+
+# class StatusConvite(models.TextChoices):
+#     PENDENTE = "PENDENTE", "Pendente"
+#     ACEITO = "ACEITO", "Aceito"
+#     EXPIRADO = "EXPIRADO", "Expirado"
+
+
+# class Convite(CarimboTempo):
+#     """ Armazena um convite para um usuário se juntar a um casal. """
+#     email_convidado = models.EmailField()
+#     casal_origem = models.ForeignKey(Casal, on_delete=models.CASCADE, related_name="convites_enviados")
+#     remetente = models.ForeignKey(User, on_delete=models.CASCADE, related_name="convites_feitos")
+#     token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+#     status = models.CharField(max_length=10, choices=StatusConvite.choices, default=StatusConvite.PENDENTE)
+
+#     class Meta:
+#         verbose_name = "Convite"
+#         verbose_name_plural = "Convites"
+#         ordering = ["-criado_em"]
+
+#     def __str__(self):
+#         return f"Convite de {self.remetente.username} para {self.email_convidado} ({self.get_status_display()})"

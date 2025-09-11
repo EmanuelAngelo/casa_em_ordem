@@ -22,6 +22,7 @@ router.register(r"rateios", RateioLancamentoViewSet, basename="rateio-lancamento
 router.register(r"casais-extras", CasalExtrasViewSet, basename="casal-extras")
 router.register(r"cartoes", CartaoCreditoViewSet, basename="cartao-credito")
 router.register(r"compras-cartao", CompraCartaoViewSet, basename="compra-cartao")
+# router.register(r"convites", ConviteViewSet, basename="convite")
 
 
 
