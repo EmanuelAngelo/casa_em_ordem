@@ -1,7 +1,9 @@
 import axios from "axios";
 
 const instance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/",
+  baseURL:
+    import.meta.env.VITE_API_BASE_URL ||
+    "https://ruthusky.pythonanywhere.com/api/",
   timeout: 15000,
 });
 
@@ -69,8 +71,8 @@ instance.interceptors.response.use(
     isRefreshing = true;
     try {
       const { data } = await axios.post(
-        (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/") +
-          "token/refresh/",
+        (import.meta.env.VITE_API_BASE_URL ||
+          "https://ruthusky.pythonanywhere.com/api/") + "token/refresh/",
         { refresh },
         { timeout: 15000 }
       );

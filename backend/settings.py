@@ -129,6 +129,15 @@ CORS_ALLOW_ALL_ORIGINS = True  # em dev; em prod, definir lista específica
 # importante para requests via HTTPS no PythonAnywhere
 CSRF_TRUSTED_ORIGINS = ["https://ruthusky.pythonanywhere.com"]
 
+# CORS
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    # --- VERSÃO CORRIGIDA PARA O VERCEL ---
+    "https://gastos-a-dois.vercel.app/",
+]
+CORS_ALLOW_CREDENTIALS = True
+
 # REST_FRAMEWORK = {
 #     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 #     "DEFAULT_AUTHENTICATION_CLASSES": (
