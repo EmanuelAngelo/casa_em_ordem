@@ -51,13 +51,13 @@
             title="Lançamentos"
             to="/lancamentos"
           />
-          <v-list-item
+          <!-- <v-list-item
             prepend-icon="mdi-file-cog"
             :disabled="$route.meta?.hideChrome"
             title="Modelos de Despesa"
             value="despesas-modelo"
             to="/modelos"
-          />
+          /> -->
           <v-list-item
             prepend-icon="mdi-chart-pie"
             title="Relatório Financeiro"
