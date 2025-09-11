@@ -36,7 +36,7 @@
               </v-btn>
             </v-form>
             <v-card-actions class="justify-center">
-              <RouterLink to="/register">Criar conta</RouterLink>
+              <!-- <RouterLink to="/register">Criar conta</RouterLink> -->
             </v-card-actions>
             <v-alert v-if="error" type="error" variant="tonal" class="mt-4">
               {{ error }}
