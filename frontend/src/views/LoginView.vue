@@ -101,7 +101,7 @@ async function onSubmit() {
 </script>
 <style scoped>
 .bg-grey-lighten-4 {
-  background: url("https://images.pexels.com/photos/1767434/pexels-photo-1767434.jpeg")
+  background: url("https://images.pexels.com/photos/33109/fall-autumn-red-season.jpg")
     no-repeat center center fixed !important;
   background-size: cover;
 }
