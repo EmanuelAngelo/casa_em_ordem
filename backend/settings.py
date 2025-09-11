@@ -11,9 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-g(2iz&_40##p6=97=*5==1#8sw*iofm=wmkn0l%%wr7jzq+prs'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ["ruthusky.pythonanywhere.com"]
 
 
 # Application definition
@@ -113,7 +113,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -122,6 +123,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS - ajuste o domínio do frontend PWA quando houver
 CORS_ALLOW_ALL_ORIGINS = True  # em dev; em prod, definir lista específica
+
+# importante para requests via HTTPS no PythonAnywhere
+CSRF_TRUSTED_ORIGINS = ["https://ruthusky.pythonanywhere.com"]
 
 # REST_FRAMEWORK = {
 #     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
