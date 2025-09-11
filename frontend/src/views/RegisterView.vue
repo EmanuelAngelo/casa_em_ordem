@@ -121,23 +121,26 @@ async function onSubmit() {
     const redirect = route.query.redirect || "/";
     router.replace(redirect);
   } catch (e) {
-    // --- LÓGICA DE ERRO MELHORADA ---
+    // --- LÓGICA DE ERRO CORRIGIDA E MAIS ROBUSTA ---
     const errors = e.response?.data;
+    let errorMessage =
+      "Não foi possível criar a conta. Verifique os dados e tente novamente."; // Mensagem padrão
+
     if (errors && typeof errors === "object") {
-      // Constrói uma mensagem de erro a partir de todas as validações retornadas
-      const errorMessages = Object.entries(errors).map(([field, messages]) => {
-        // Transforma o nome do campo para algo mais amigável se necessário
-        const fieldName = field === "username" ? "Usuário" : field;
-        const messageText = Array.isArray(messages)
-          ? messages.join(" ")
-          : messages;
-        return `${fieldName}: ${messageText}`;
-      });
-      error.value = errorMessages.join(" \n"); // Junta as mensagens com quebra de linha
-    } else {
-      error.value =
-        "Não foi possível criar sua conta. Verifique os dados e tente novamente.";
+      // Pega a primeira chave do objeto de erro (ex: 'username')
+      const firstErrorKey = Object.keys(errors)[0];
+      const errorMessages = errors[firstErrorKey];
+
+      // Se a chave contiver uma lista de mensagens (padrão do Django), pega a primeira.
+      if (Array.isArray(errorMessages) && errorMessages.length > 0) {
+        errorMessage = errorMessages[0];
+      } else if (typeof errorMessages === "string") {
+        // Se for apenas uma string
+        errorMessage = errorMessages;
+      }
     }
+
+    error.value = errorMessage;
   } finally {
     loading.value = false;
   }
