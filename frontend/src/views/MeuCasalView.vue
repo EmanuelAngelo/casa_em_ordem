@@ -18,6 +18,7 @@
               type="article, actions"
             ></v-skeleton-loader>
 
+            <!-- Estado 1: Usuário TEM um casal -->
             <v-row v-else-if="casal">
               <!-- Sub-Coluna Esquerda: Informações e Salários -->
               <v-col cols="12" lg="6">
@@ -59,7 +60,7 @@
                 </div>
               </v-col>
 
-              <!-- Sub-Coluna Direita: Convite (Lógica Original) -->
+              <!-- Sub-Coluna Direita: Convite (Lógica Original Restaurada) -->
               <v-col cols="12" lg="6">
                 <v-card variant="outlined" class="fill-height">
                   <v-card-title>Adicionar parceiro(a)</v-card-title>
@@ -98,6 +99,7 @@
               </v-col>
             </v-row>
 
+            <!-- Estado 2: Usuário NÃO TEM um casal -->
             <v-alert
               v-else
               type="info"
@@ -152,7 +154,7 @@
         </v-card>
       </v-col>
     </v-row>
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000">
       {{ snackbar.text }}
     </v-snackbar>
   </v-container>
@@ -166,10 +168,11 @@ const casal = ref(null);
 const loading = ref(true);
 const saving = ref(false);
 const loadingInvite = ref(false);
-const usernameOrEmail = ref(""); // Restaurado
-const inviteMsg = ref(""); // Restaurado
-const inviteType = ref("info"); // Restaurado
+const usernameOrEmail = ref("");
+const inviteMsg = ref("");
+const inviteType = ref("info");
 const snackbar = reactive({ show: false, text: "", color: "success" });
+
 const savingPassword = ref(false);
 const passwordForm = reactive({ nova_senha: "", confirmacao_senha: "" });
 const passwordErrors = ref({});
@@ -183,16 +186,45 @@ async function loadCasal() {
     casal.value = data;
   } catch (e) {
     casal.value = null;
+    console.error("Não foi possível carregar dados do casal:", e);
   } finally {
     loading.value = false;
   }
 }
 
 async function saveMembros() {
-  // ... (função sem alterações)
+  if (!casal.value?.id) {
+    snackbar.value = {
+      show: true,
+      text: "Erro: ID do casal não encontrado para salvar.",
+      color: "error",
+    };
+    return;
+  }
+  saving.value = true;
+  try {
+    await axios.patch(`/casais/${casal.value.id}/`, { nome: casal.value.nome });
+    const promises = casal.value.membros.map((membro) =>
+      axios.patch(`/membros/${membro.id}/`, {
+        salario_mensal: membro.salario_mensal || 0,
+      })
+    );
+    await Promise.all(promises);
+    snackbar.value = {
+      show: true,
+      text: "Dados do casal salvos com sucesso!",
+      color: "success",
+    };
+  } catch (e) {
+    console.error("Erro ao salvar dados do casal:", e);
+    const detail =
+      e.response?.data?.detail || "Erro ao salvar os dados. Tente novamente.";
+    snackbar.value = { show: true, text: detail, color: "error" };
+  } finally {
+    saving.value = false;
+  }
 }
 
-// Função de convite RESTAURADA para a versão original
 async function onInvite() {
   inviteMsg.value = "";
   inviteType.value = "info";
@@ -204,7 +236,7 @@ async function onInvite() {
     inviteMsg.value = data.detail || "Usuário adicionado ao casal.";
     inviteType.value = "success";
     usernameOrEmail.value = "";
-    await loadCasal(); // Recarrega para mostrar o novo membro
+    await loadCasal();
   } catch (e) {
     inviteMsg.value =
       e.response?.data?.detail || "Não foi possível adicionar o usuário.";
@@ -215,6 +247,37 @@ async function onInvite() {
 }
 
 async function changePassword() {
-  // ... (função sem alterações)
+  savingPassword.value = true;
+  passwordErrors.value = {};
+  try {
+    const { data } = await axios.post("/auth/change-password/", passwordForm);
+    snackbar.value = {
+      show: true,
+      text: data.detail || "Senha alterada!",
+      color: "success",
+    };
+    passwordForm.nova_senha = "";
+    passwordForm.confirmacao_senha = "";
+  } catch (e) {
+    console.error("Erro ao alterar senha:", e);
+    const errors = e.response?.data;
+    if (errors && typeof errors === "object") {
+      const firstErrorKey = Object.keys(errors)[0];
+      const errorMessages = errors[firstErrorKey];
+      const detail = Array.isArray(errorMessages)
+        ? errorMessages[0]
+        : errorMessages;
+      snackbar.value = { show: true, text: detail, color: "error" };
+      passwordErrors.value = errors;
+    } else {
+      snackbar.value = {
+        show: true,
+        text: "Não foi possível alterar a senha.",
+        color: "error",
+      };
+    }
+  } finally {
+    savingPassword.value = false;
+  }
 }
 </script>
