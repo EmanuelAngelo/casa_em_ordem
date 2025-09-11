@@ -44,6 +44,7 @@ from .serializers import (
     RateioLancamentoSerializer,
     MembroCasalSerializer,
     CasalSerializer,
+    ChangePasswordSerializer,
 )
 from .services import criar_rateios_para_lancamento, gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
 from .utils import get_casal_ativo_do_usuario, assert_user_pertence_ao_casal
@@ -156,26 +157,27 @@ class MembroCasalViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
 # ----------------------------
 # Categorias / Subcategorias
 # ----------------------------
-class CategoriaViewSet(viewsets.ModelViewSet):
+class CategoriaViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
+    # Adicionamos o CasalScopedQuerysetMixin
     queryset = Categoria.objects.all().order_by("nome")
     serializer_class = CategoriaSerializer
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal] # Permissões mais restritas
     filter_backends = [filters.SearchFilter]
     search_fields = ["nome"]
+    # O perform_create já é herdado do mixin, associando o casal automaticamente
 
-
-class SubcategoriaViewSet(viewsets.ModelViewSet):
+class SubcategoriaViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
+    # Adicionamos o CasalScopedQuerysetMixin
     queryset = Subcategoria.objects.select_related("categoria").all().order_by("categoria__nome", "nome")
     serializer_class = SubcategoriaSerializer
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal] # Permissões mais restritas
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     search_fields = ["nome", "categoria__nome"]
     filterset_fields = ["categoria"]
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        categoria_id = self.request.query_params.get("categoria")
-        if categoria_id:
-            qs = qs.filter(categoria_id=categoria_id)
-        return qs
+    # O mixin já filtra as subcategorias baseado na categoria, que por sua vez já é do casal
+    def get_casal_filter_kwargs(self):
+        return {"categoria__casal": self.get_casal_usuario()}
 
 
 # ----------------------------
@@ -395,3 +397,17 @@ class RelatorioFinanceiroView(APIView):
             "total_gasto": total_gasto,
             "gastos_por_categoria": list(gastos_por_categoria)
         })
+    
+# --- NOVA VIEW PARA TROCA DE SENHA ---
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        user.set_password(serializer.validated_data['nova_senha'])
+        user.save()
+
+        return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)

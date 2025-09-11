@@ -381,3 +381,13 @@ class ResumoLancamentoSerializer(serializers.Serializer):
                 'status': 'PARCELADA', # Um status customizado para o frontend
             }
         return super().to_representation(instance)
+    
+# --- NOVO SERIALIZER PARA TROCA DE SENHA ---
+class ChangePasswordSerializer(serializers.Serializer):
+    nova_senha = serializers.CharField(write_only=True, required=True, min_length=6)
+    confirmacao_senha = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        if attrs['nova_senha'] != attrs['confirmacao_senha']:
+            raise serializers.ValidationError({"confirmacao_senha": "As senhas não coincidem."})
+        return attrs

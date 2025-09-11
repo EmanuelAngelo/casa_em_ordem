@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from despesas.views import (
     CartaoCreditoViewSet, CategoriaViewSet, CompraCartaoViewSet, RelatorioFinanceiroView, SubcategoriaViewSet, LancamentoViewSet, CasalViewSet, MembroCasalViewSet,
     DespesaModeloViewSet, RegraRateioPadraoViewSet,
-    LancamentoViewSet, RateioLancamentoViewSet, RegisterView, CasalExtrasViewSet, ResumoLancamentosView
+    LancamentoViewSet, RateioLancamentoViewSet, RegisterView, CasalExtrasViewSet, ResumoLancamentosView, ChangePasswordView
 )
 
 router = DefaultRouter()
@@ -24,6 +24,7 @@ router.register(r"cartoes", CartaoCreditoViewSet, basename="cartao-credito")
 router.register(r"compras-cartao", CompraCartaoViewSet, basename="compra-cartao")
 
 
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include(router.urls)),
@@ -33,6 +34,7 @@ urlpatterns = [
     path("api/relatorio-financeiro/", RelatorioFinanceiroView.as_view(), name="relatorio-financeiro"),
 
     path("api/auth/register/", RegisterView.as_view(), name="auth-register"),
+    path("api/auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
 
     # JWT
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
