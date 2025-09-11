@@ -96,7 +96,6 @@ async function onSubmit() {
       nome_casal: nome_casal.value,
     });
 
-    // Salva os tokens e o nome do usuário para a AppBar
     localStorage.setItem("accessToken", data.access);
     localStorage.setItem("refreshToken", data.refresh);
     localStorage.setItem(
@@ -104,10 +103,8 @@ async function onSubmit() {
       data.user?.first_name || data.user?.username || username.value
     );
 
-    // Seta o header de autorização para a próxima chamada (aceitar o convite)
     axios.defaults.headers.common["Authorization"] = `Bearer ${data.access}`;
 
-    // --- LÓGICA DE CONVITE ADICIONADA ---
     const pendingToken = localStorage.getItem("pendingInvitationToken");
     if (pendingToken) {
       try {
@@ -118,11 +115,9 @@ async function onSubmit() {
           "Falha ao aceitar convite pendente após registro:",
           acceptError
         );
-        // Não impede o fluxo, o usuário já está logado. Ele pode aceitar o convite novamente se necessário.
       }
     }
 
-    // Redireciona para a página principal ou para a página de destino original
     const redirect = route.query.redirect || "/";
     router.replace(redirect);
   } catch (e) {
@@ -131,11 +126,17 @@ async function onSubmit() {
     if (errors && typeof errors === "object") {
       // Constrói uma mensagem de erro a partir de todas as validações retornadas
       const errorMessages = Object.entries(errors).map(([field, messages]) => {
-        return `${Array.isArray(messages) ? messages.join(" ") : messages}`;
+        // Transforma o nome do campo para algo mais amigável se necessário
+        const fieldName = field === "username" ? "Usuário" : field;
+        const messageText = Array.isArray(messages)
+          ? messages.join(" ")
+          : messages;
+        return `${fieldName}: ${messageText}`;
       });
-      error.value = errorMessages.join(" ");
+      error.value = errorMessages.join(" \n"); // Junta as mensagens com quebra de linha
     } else {
-      error.value = "Não foi possível criar sua conta. Tente novamente.";
+      error.value =
+        "Não foi possível criar sua conta. Verifique os dados e tente novamente.";
     }
   } finally {
     loading.value = false;

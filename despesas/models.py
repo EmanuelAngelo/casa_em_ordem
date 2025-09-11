@@ -91,7 +91,7 @@ class Categoria(CarimboTempo):
     # --- MUDANÇAS AQUI ---
     casal = models.ForeignKey(Casal, related_name="categorias", on_delete=models.CASCADE)
     nome = models.CharField(max_length=100) # unique=True foi removido daqui
-    slug = models.SlugField(max_length=120, unique=True, blank=True)
+    slug = models.SlugField(max_length=120, blank=True)
     ativa = models.BooleanField(default=True)
 
     class Meta:
