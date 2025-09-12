@@ -42,7 +42,10 @@
                 label="Nome do casal (opcional)"
                 prepend-inner-icon="mdi-heart"
               />
-
+              <span>
+                Se seu parceiro(a) já
+                <b>criou conta com Nome do casal,</b> deixe em branco</span
+              >
               <v-btn
                 class="mt-4"
                 color="blue-darken-3"
