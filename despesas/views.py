@@ -168,17 +168,22 @@ class CategoriaViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     # O perform_create já é herdado do mixin, associando o casal automaticamente
 
 class SubcategoriaViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    # Adicionamos o CasalScopedQuerysetMixin
     queryset = Subcategoria.objects.select_related("categoria").all().order_by("categoria__nome", "nome")
     serializer_class = SubcategoriaSerializer
-    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal] # Permissões mais restritas
+    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     search_fields = ["nome", "categoria__nome"]
     filterset_fields = ["categoria"]
 
-    # O mixin já filtra as subcategorias baseado na categoria, que por sua vez já é do casal
     def get_casal_filter_kwargs(self):
         return {"categoria__casal": self.get_casal_usuario()}
+
+    def perform_create(self, serializer):
+        # CORREÇÃO: Sobrescrevemos o perform_create do mixin para evitar
+        # que ele tente salvar um campo 'casal' que não existe no modelo Subcategoria.
+        # A segurança já é garantida pela permissão, que valida se a Categoria
+        # selecionada pertence ao casal do usuário.
+        serializer.save()
 
 
 # ----------------------------
@@ -211,6 +216,13 @@ class RegraRateioPadraoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         casal = self.get_casal_usuario()
         return super().get_queryset().filter(despesa_modelo__casal=casal)
+
+    def perform_create(self, serializer):
+        # CORREÇÃO: Sobrescrevemos o perform_create do mixin.
+        # A validação de segurança já acontece nas permissões.
+        # O serializer já recebe todos os dados necessários (como despesa_modelo_id)
+        # do frontend, então só precisamos salvar.
+        serializer.save()
 
 
 # ----------------------------
