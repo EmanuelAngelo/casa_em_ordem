@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from despesas.views import (
     CartaoCreditoViewSet, CategoriaViewSet, CompraCartaoViewSet, RelatorioFinanceiroView, SubcategoriaViewSet, LancamentoViewSet, CasalViewSet, MembroCasalViewSet,
     DespesaModeloViewSet, RegraRateioPadraoViewSet,
-    LancamentoViewSet, RateioLancamentoViewSet, RegisterView, CasalExtrasViewSet, ResumoLancamentosView, ChangePasswordView
+    LancamentoViewSet, RateioLancamentoViewSet, RegisterView, CasalExtrasViewSet, ResumoLancamentosView, ChangePasswordView, CurrentUserView
 )
 
 router = DefaultRouter()
@@ -36,6 +36,7 @@ urlpatterns = [
 
     path("api/auth/register/", RegisterView.as_view(), name="auth-register"),
     path("api/auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
+    path("api/users/me/", CurrentUserView.as_view(), name="users-me"),
 
     # JWT
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
