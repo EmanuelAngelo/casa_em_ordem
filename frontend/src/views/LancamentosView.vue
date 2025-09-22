@@ -33,22 +33,6 @@
         :escopo-options="escopoOptions"
         :cartoes="cartoes"
         :saving="saving"
-        :current-user-id="currentUserId"
-        @close="formDialog = false"
-        @save="saveItem"
-      />
-    </v-dialog>
-
-    <v-dialog v-model="formDialog" persistent max-width="720px">
-      <LancamentosForm
-        :model="editedItem"
-        :categorias="categorias"
-        :subcategorias="subcategorias"
-        :membros="membrosOptions"
-        :status-options="statusOptions"
-        :escopo-options="escopoOptions"
-        :cartoes="cartoes"
-        :saving="saving"
         @close="formDialog = false"
         @save="saveItem"
       />
@@ -121,7 +105,6 @@ const categorias = ref([]);
 const subcategorias = ref([]);
 const membrosOptions = ref([]);
 const cartoes = ref([]);
-const currentUserId = ref(null);
 
 const loading = ref(false);
 const saving = ref(false);
@@ -170,19 +153,8 @@ async function fetchAllData() {
     fetchSubcategorias(),
     fetchMembros(),
     fetchCartoes(),
-    fetchCurrentUser(),
   ]);
   loading.value = false;
-}
-
-async function fetchCurrentUser() {
-  try {
-    const { data } = await axios.get("/users/me/");
-    currentUserId.value = data.id;
-  } catch (e) {
-    console.error("Não foi possível carregar os dados do usuário atual.", e);
-    handleApiError(e, "Falha ao obter dados do usuário.");
-  }
 }
 
 async function fetchLancamentosResumo() {
