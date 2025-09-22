@@ -124,7 +124,7 @@
             <v-col cols="12" md="6">
               <v-select
                 v-model="local.cartao_id"
-                :items="cartoes"
+                :items="cartoesLocal"
                 item-title="nome"
                 item-value="id"
                 label="Qual cartão foi usado?"
@@ -132,7 +132,23 @@
                 variant="outlined"
                 density="compact"
                 required
-              />
+              >
+                <template #append>
+                  <v-btn
+                    size="small"
+                    variant="text"
+                    icon
+                    @click.stop="showNewCard = !showNewCard"
+                    :aria-label="
+                      showNewCard ? 'Fechar novo cartão' : 'Novo cartão'
+                    "
+                  >
+                    <v-icon>{{
+                      showNewCard ? "mdi-close" : "mdi-plus"
+                    }}</v-icon>
+                  </v-btn>
+                </template>
+              </v-select>
             </v-col>
             <v-col cols="12" md="6">
               <v-text-field
@@ -182,6 +198,93 @@
               </v-text-field>
             </v-col>
           </template>
+
+          <!-- FORMULÁRIO DE NOVO CARTÃO RESTAURADO -->
+          <v-col cols="12" v-if="local.paymentMethod === 'card' && showNewCard">
+            <v-card variant="tonal" class="pa-3">
+              <v-row dense>
+                <v-col cols="12">
+                  <div class="text-subtitle-1">Novo Cartão</div>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="newCard.nome"
+                    label="Nome do cartão (Ex: Maria - Nubank)"
+                    prepend-inner-icon="mdi-credit-card-plus-outline"
+                    :disabled="creatingCard"
+                    autofocus
+                    required
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-select
+                    v-model="newCard.bandeira"
+                    :items="bandeiraOptions"
+                    label="Bandeira"
+                    prepend-inner-icon="mdi-flag"
+                    :disabled="creatingCard"
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="newCard.dia_vencimento"
+                    label="Dia de vencimento (1–28)"
+                    type="number"
+                    min="1"
+                    max="28"
+                    prepend-inner-icon="mdi-calendar-alert"
+                    :disabled="creatingCard"
+                    required
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="newCard.dia_fechamento"
+                    label="Dia de fechamento (1–28)"
+                    type="number"
+                    min="1"
+                    max="28"
+                    prepend-inner-icon="mdi-calendar-lock"
+                    :disabled="creatingCard"
+                    required
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="newCard.limite"
+                    label="Limite (opcional)"
+                    type="number"
+                    step="0.01"
+                    prepend-inner-icon="mdi-cash-lock"
+                    :disabled="creatingCard"
+                  />
+                </v-col>
+
+                <v-col cols="12" class="d-flex justify-end">
+                  <v-btn
+                    variant="text"
+                    class="me-2"
+                    :disabled="creatingCard"
+                    @click="cancelNewCard"
+                  >
+                    Cancelar
+                  </v-btn>
+                  <v-btn
+                    color="blue-darken-3"
+                    :loading="creatingCard"
+                    :disabled="
+                      !newCard.nome ||
+                      !newCard.dia_vencimento ||
+                      !newCard.dia_fechamento
+                    "
+                    @click="createCard"
+                  >
+                    Salvar cartão
+                  </v-btn>
+                </v-col>
+              </v-row>
+            </v-card>
+          </v-col>
 
           <!-- 4. CAMPOS DE DETALHES -->
           <v-col cols="12" md="4">
@@ -235,7 +338,8 @@
 </template>
 
 <script setup>
-import { reactive, watch, computed } from "vue";
+import { reactive, ref, watch, computed } from "vue";
+import axios from "@/api/axios";
 
 const props = defineProps({
   model: { type: Object, default: () => ({}) },
@@ -253,7 +357,7 @@ const emit = defineEmits(["save", "close"]);
 
 const local = reactive({
   id: null,
-  paymentMethod: "cash", // 'cash' ou 'card'
+  paymentMethod: "cash",
   descricao: "",
   valor_total: "",
   competencia: null,
@@ -265,10 +369,30 @@ const local = reactive({
   escopo: "COMP",
   pagador_id: null,
   dono_pessoal_id: null,
-  status: "PENDENTE", // Adicionado para lançamentos 'cash'
+  status: "PENDENTE",
 });
 
 const menus = reactive({ competencia: false, vencimento: false });
+
+const cartoesLocal = ref([]);
+const showNewCard = ref(false);
+const creatingCard = ref(false);
+const newCard = reactive({
+  nome: "",
+  bandeira: "OUTRO",
+  limite: null,
+  dia_fechamento: 1,
+  dia_vencimento: 10,
+});
+const bandeiraOptions = ["VISA", "MASTER", "ELO", "AMEX", "OUTRO"];
+
+watch(
+  () => props.cartoes,
+  (arr) => {
+    cartoesLocal.value = Array.isArray(arr) ? [...arr] : [];
+  },
+  { immediate: true }
+);
 
 watch(
   () => [props.model, props.currentUserId],
@@ -292,7 +416,6 @@ watch(
       local.dono_pessoal_id = item.dono_pessoal_id || item.dono_pessoal?.id;
       local.status = item.status || "PENDENTE";
 
-      // Campos de cartão não são editáveis, então ficam zerados
       local.cartao_id = null;
       local.parcelas_total = 1;
     } else {
@@ -319,9 +442,7 @@ watch(
 watch(
   () => local.escopo,
   (newEscopo) => {
-    // Não aplica o padrão se estiver editando, para não sobrescrever
     if (local.id) return;
-
     if (newEscopo === "PESS") {
       local.dono_pessoal_id = props.currentUserId;
     } else {
@@ -329,6 +450,35 @@ watch(
     }
   }
 );
+
+function cancelNewCard() {
+  showNewCard.value = false;
+  Object.assign(newCard, {
+    nome: "",
+    bandeira: "OUTRO",
+    limite: null,
+    dia_fechamento: 1,
+    dia_vencimento: 10,
+  });
+}
+
+async function createCard() {
+  if (!newCard.nome || !newCard.dia_vencimento || !newCard.dia_fechamento)
+    return;
+  creatingCard.value = true;
+  try {
+    const payload = { ...newCard };
+    if (!payload.limite) delete payload.limite;
+    const { data } = await axios.post("/cartoes/", payload);
+    cartoesLocal.value.push(data); // Adiciona o novo cartão à lista local
+    local.cartao_id = data.id; // Seleciona o novo cartão
+    cancelNewCard();
+  } catch (e) {
+    console.error("Erro ao criar cartão:", e);
+  } finally {
+    creatingCard.value = false;
+  }
+}
 
 const subcategoriasNormalizadas = computed(() =>
   (props.subcategorias || []).map((s) => ({
@@ -388,7 +538,6 @@ function emitSave() {
       escopo: local.escopo,
       pagador_id: local.pagador_id,
       dono_pessoal_id: local.dono_pessoal_id,
-      // Passa o 'type' para a view poder decidir o endpoint
       type: "compra",
     };
   } else {
@@ -403,7 +552,6 @@ function emitSave() {
       pagador_id: local.pagador_id,
       dono_pessoal_id: local.dono_pessoal_id,
       status: local.status,
-      // Passa o 'type' para a view poder decidir o endpoint
       type: "lancamento",
     };
   }
