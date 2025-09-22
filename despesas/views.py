@@ -47,6 +47,7 @@ from .serializers import (
     MembroCasalSerializer,
     CasalSerializer,
     ChangePasswordSerializer,
+    UsuarioSlimSerializer,
 )
 from .services import criar_rateios_para_lancamento, gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
 from .utils import get_casal_ativo_do_usuario, assert_user_pertence_ao_casal
@@ -424,6 +425,16 @@ class ChangePasswordView(APIView):
         user.save()
 
         return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
+    
+class CurrentUserView(APIView):
+    """
+    Retorna os dados do usuário atualmente autenticado.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        serializer = UsuarioSlimSerializer(request.user)
+        return Response(serializer.data)
 
 
 # class ConviteViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
