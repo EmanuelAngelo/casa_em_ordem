@@ -99,7 +99,7 @@ CSRF_TRUSTED_ORIGINS = ["https://ruthusky.pythonanywhere.com"]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
-    "https://gastos-a-dois.vercel.app",
+    "https://casa-em-ordem.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
