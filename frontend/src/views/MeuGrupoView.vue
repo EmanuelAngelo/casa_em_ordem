@@ -2,7 +2,7 @@
   <v-container fluid>
     <v-card>
       <v-toolbar color="blue-darken-3">
-        <v-toolbar-title>Meu Casal</v-toolbar-title>
+        <v-toolbar-title>Meu Grupo</v-toolbar-title>
         <v-spacer />
         <v-btn prepend-icon="mdi-lock" @click="passwordDialog = true">
           Alterar Senha
@@ -18,14 +18,15 @@
           type="article, actions"
         ></v-skeleton-loader>
 
-        <!-- Estado 1: Usuário TEM um casal -->
+        <!-- Estado 1: Usuário TEM um casal (grupo) -->
         <v-row v-else-if="casal">
-          <!-- Coluna Esquerda: Informações e Salários (agora se expande) -->
+          <!-- Coluna Esquerda: Informações e Salários -->
           <v-col cols="12" :lg="isCasalFull ? 12 : 6">
             <div>
               <v-text-field
                 v-model="casal.nome"
-                label="Nome do Casal"
+                label="Nome do Grupo"
+                prepend-inner-icon="mdi-home-group"
                 variant="outlined"
                 density="compact"
                 class="mb-4"
@@ -60,10 +61,10 @@
             </div>
           </v-col>
 
-          <!-- Coluna Direita: Convite (só aparece se o casal não estiver cheio) -->
+          <!-- Coluna Direita: Convite (sem limite de membros agora) -->
           <v-col cols="12" lg="6" v-if="!isCasalFull">
             <v-card variant="outlined" class="fill-height">
-              <v-card-title>Adicionar parceiro(a)</v-card-title>
+              <v-card-title>Adicionar membros</v-card-title>
               <v-card-subtitle
                 >Adicione um usuário já cadastrado.</v-card-subtitle
               >
@@ -179,17 +180,16 @@ const savingPassword = ref(false);
 const passwordForm = reactive({ nova_senha: "", confirmacao_senha: "" });
 const passwordErrors = ref({});
 
-// --- Computed property para verificar se o casal está cheio ---
-const isCasalFull = computed(() => {
-  return casal.value && casal.value.membros && casal.value.membros.length >= 2;
-});
+// --- Agora, sem limite de membros no grupo ---
+const isCasalFull = computed(() => false);
 
 onMounted(loadCasal);
 
 async function loadCasal() {
   loading.value = true;
   try {
-    const { data } = await axios.get("/casais/meu/");
+    // TROCA: /casais/meu/ -> /grupos/meu/
+    const { data } = await axios.get("/grupos/meu/");
     casal.value = data;
   } catch (e) {
     casal.value = null;
@@ -210,13 +210,17 @@ async function saveMembros() {
   }
   saving.value = true;
   try {
-    await axios.patch(`/casais/${casal.value.id}/`, { nome: casal.value.nome });
+    // TROCA: /casais/:id/ -> /grupos/:id/
+    await axios.patch(`/grupos/${casal.value.id}/`, { nome: casal.value.nome });
+
+    // TROCA: /membros/:id/ -> /moradores/:id/
     const promises = casal.value.membros.map((membro) =>
-      axios.patch(`/membros/${membro.id}/`, {
+      axios.patch(`/moradores/${membro.id}/`, {
         salario_mensal: membro.salario_mensal || 0,
       })
     );
     await Promise.all(promises);
+
     snackbar.value = {
       show: true,
       text: "Dados do casal salvos com sucesso!",
@@ -237,9 +241,11 @@ async function onInvite() {
   inviteType.value = "info";
   loadingInvite.value = true;
   try {
-    const { data } = await axios.post("/casais-extras/convidar/", {
-      username_or_email: usernameOrEmail.value.trim(),
+    // já estava correto, só garantir que usamos axios
+    const { data } = await axios.post("/grupos-extras/convidar/", {
+      username_or_email: usernameOrEmail.value,
     });
+
     inviteMsg.value = data.detail || "Usuário adicionado ao casal.";
     inviteType.value = "success";
     usernameOrEmail.value = "";

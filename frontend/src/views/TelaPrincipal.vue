@@ -42,8 +42,8 @@
           <v-list-item
             prepend-icon="mdi-email-arrow-right-outline"
             :disabled="$route.meta?.hideChrome"
-            title="Meu Casal"
-            to="/meu-casal"
+            title="Meu Grupo"
+            to="/meu-grupo"
           />
           <v-list-item
             prepend-icon="mdi-cash-multiple"

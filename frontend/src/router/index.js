@@ -1,17 +1,17 @@
 import { createRouter, createWebHistory } from "vue-router";
 
-// lazy
+// lazy imports
 const TelaPrincipal = () => import("../views/TelaPrincipal.vue");
 const Dashboard = () => import("../views/HomeView.vue");
 const Lancamentos = () => import("@/views/LancamentosView.vue");
 const Categorias = () => import("@/views/CategoriasView.vue");
 const Login = () => import("@/views/LoginView.vue");
 const Register = () => import("../views/RegisterView.vue");
-const MeuCasal = () => import("@/views/MeuCasalView.vue");
+const MeuGrupo = () => import("@/views/MeuGrupoView.vue"); // renomeado
 const DespesasModelo = () => import("@/views/DespesasModeloView.vue");
 const RelatorioFinanceiro = () =>
   import("../views/RelatorioFinanceiroView.vue");
-// const AceitarConvite = () => import("@/views/AceitarConviteView.vue");
+const AceitarConvite = () => import("@/views/AceitarConviteView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
@@ -29,28 +29,18 @@ const router = createRouter({
       component: Register,
       meta: { public: true, hideChrome: true },
     },
+    // Aceitar convite (rota pública para entrar em grupo)
     {
-      path: "/categorias",
-      name: "categorias",
-      component: Categorias,
+      path: "/aceitar-convite",
+      name: "aceitar-convite",
+      component: AceitarConvite,
       meta: { public: true, hideChrome: true },
     },
-    {
-      path: "/modelos",
-      name: "despesas-modelo",
-      component: DespesasModelo,
-      meta: { public: true, hideChrome: true },
-    },
-    // {
-    //   path: "/aceitar-convite",
-    //   name: "aceitar-convite",
-    //   component: AceitarConvite,
-    //   meta: { public: true, hideChrome: true },
-    // },
-    // AUTENTICADAS (com layout)
+
+    // AUTENTICADAS (com layout principal)
     {
       path: "/",
-      component: TelaPrincipal, // aqui tem drawer/topbar
+      component: TelaPrincipal, // drawer/topbar aqui
       children: [
         { path: "", name: "dashboard", component: Dashboard },
         { path: "lancamentos", name: "lancamentos", component: Lancamentos },
@@ -60,8 +50,7 @@ const router = createRouter({
           component: RelatorioFinanceiro,
         },
         { path: "categorias", name: "categorias", component: Categorias },
-        { path: "meu-casal", name: "meu-casal", component: MeuCasal },
-        { path: "categorias", name: "categorias", component: Categorias },
+        { path: "meu-grupo", name: "meu-grupo", component: MeuGrupo },
         { path: "modelos", name: "despesas-modelo", component: DespesasModelo },
       ],
     },

@@ -18,24 +18,36 @@
               <v-btn to="/login" class="mt-4">Ir para o Login</v-btn>
             </div>
 
-            <div v-else-if="conviteInfo">
-              <p class="text-h6 mb-2">{{ conviteInfo.remetente_nome }}</p>
+            <div v-else>
+              <!-- Informação principal (fluxo por token descontinuado) -->
+              <p class="text-h6 mb-2">Convite para entrar em um grupo</p>
               <p class="mb-4">
-                convidou você para o casal
-                <strong>"{{ conviteInfo.casal_nome }}"</strong>.
+                Nosso fluxo de convite por link/token foi descontinuado. Agora,
+                o responsável do <strong>grupo</strong> deve adicionar você
+                informando seu <strong>usuário</strong> ou
+                <strong>e-mail</strong> dentro do próprio sistema.
               </p>
 
               <!-- Caso 1: Usuário já está logado -->
               <div v-if="isLoggedIn">
-                <v-btn color="success" @click="aceitar" :loading="saving"
-                  >Entrar no Casal</v-btn
-                >
+                <v-alert type="info" variant="tonal" class="mb-4">
+                  Compartilhe seu usuário com quem vai te convidar:
+                  <br />
+                  <strong>{{ currentUserLabel }}</strong>
+                </v-alert>
+                <v-btn color="primary" @click="copiarUsuario" :loading="saving">
+                  Copiar meu usuário
+                </v-btn>
+                <div class="mt-4">
+                  <v-btn to="/" class="mt-2">Ir para o Dashboard</v-btn>
+                </div>
               </div>
 
               <!-- Caso 2: Usuário não está logado -->
               <div v-else>
                 <p class="text-caption mb-4">
-                  Para aceitar, crie uma conta ou faça login.
+                  Para entrar em um grupo, faça login ou crie sua conta e
+                  informe seu usuário para o responsável te adicionar.
                 </p>
                 <v-btn to="/login" color="primary" class="me-2"
                   >Fazer Login</v-btn
@@ -52,54 +64,44 @@
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import axios from "@/api/axios";
+import { useRoute } from "vue-router";
 
 const route = useRoute();
-const router = useRouter();
 
 const loading = ref(true);
 const saving = ref(false);
 const error = ref("");
-const conviteInfo = ref(null);
 const token = ref(route.query.token || null);
 
+// Está logado quando há accessToken
 const isLoggedIn = computed(() => !!localStorage.getItem("accessToken"));
-
-onMounted(async () => {
-  if (!token.value) {
-    error.value = "Token de convite não encontrado.";
-    loading.value = false;
-    return;
-  }
-
-  // Armazena o token para ser usado após o login/registro
-  localStorage.setItem("pendingInvitationToken", token.value);
-
-  try {
-    const { data } = await axios.get(`/convites/info/${token.value}/`);
-    conviteInfo.value = data;
-  } catch (e) {
-    error.value =
-      e.response?.data?.detail ||
-      "Não foi possível carregar as informações do convite.";
-    localStorage.removeItem("pendingInvitationToken"); // Limpa se o token for inválido
-  } finally {
-    loading.value = false;
-  }
+// Mostra um rótulo amigável pro usuário logado
+const currentUserLabel = computed(() => {
+  return (
+    localStorage.getItem("userName") ||
+    localStorage.getItem("lastLoginUsername") ||
+    "meu-usuario"
+  );
 });
 
-async function aceitar() {
-  saving.value = true;
+onMounted(async () => {
+  // Fluxo antigo por token foi descontinuado: apenas mantemos a UX
+  // Armazenamos o token (se existir) para referência futura e explicamos o novo fluxo.
+  if (token.value) {
+    localStorage.setItem("pendingInvitationToken", token.value);
+  }
+
+  // Como não existe mais /convites/info/:token/, não consultamos API aqui.
+  // Apenas sinalizamos ao usuário o novo procedimento.
+  loading.value = false;
+});
+
+async function copiarUsuario() {
   try {
-    await axios.post("/convites/aceitar/", { token: token.value });
-    localStorage.removeItem("pendingInvitationToken");
-    // Forçar logout de sessão antiga se houver (opcional, mas bom)
-    // E redirecionar para o dashboard. O token JWT será o novo.
-    router.push("/?convite_aceito=1");
-  } catch (e) {
-    error.value =
-      e.response?.data?.detail || "Ocorreu um erro ao aceitar o convite.";
+    saving.value = true;
+    await navigator.clipboard.writeText(currentUserLabel.value);
+  } catch (_) {
+    // silencioso; manter layout
   } finally {
     saving.value = false;
   }

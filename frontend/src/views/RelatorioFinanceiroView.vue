@@ -128,12 +128,11 @@ import axios from "@/api/axios";
 const loading = ref(false);
 const competencia = ref(new Date().toISOString().slice(0, 7)); // "YYYY-MM"
 const membroFiltro = ref("geral");
-const membrosOptions = ref([{ label: "Visão do Casal", value: "geral" }]);
+const membrosOptions = ref([{ label: "Visão do Grupo", value: "geral" }]);
 const relatorioData = ref(null);
 
 onMounted(async () => {
   await fetchMembros();
-  // Carrega o relatório inicial ao montar a página
   if (competencia.value && membroFiltro.value) {
     fetchRelatorio();
   }
@@ -145,7 +144,8 @@ watch([competencia, membroFiltro], () => {
 
 async function fetchMembros() {
   try {
-    const { data } = await axios.get("/casais/meu/");
+    // >>> ALTERADO: /casais/meu/ -> /grupos/meu/
+    const { data } = await axios.get("/grupos/meu/");
     const membros = (data?.membros || []).map((m) => ({
       label: `Visão de ${m.usuario.first_name || m.usuario.username}`,
       value: m.usuario.id,

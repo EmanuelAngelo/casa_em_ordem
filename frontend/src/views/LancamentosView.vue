@@ -151,7 +151,7 @@ async function fetchAllData() {
     fetchLancamentosResumo(),
     fetchCategorias(),
     fetchSubcategorias(),
-    fetchMembros(),
+    fetchMembros(),      // <-- vai buscar no /grupos/meu/
     fetchCartoes(),
   ]);
   loading.value = false;
@@ -186,7 +186,8 @@ async function fetchSubcategorias() {
 
 async function fetchMembros() {
   try {
-    const { data } = await axios.get("/casais/meu/");
+    // --- MUDANÇA AQUI: rota nova do backend ---
+    const { data } = await axios.get("/grupos/meu/");
     membrosOptions.value = (data?.membros || []).map((m) => ({
       label: m.usuario.first_name || m.usuario.username,
       value: m.usuario.id,
@@ -195,7 +196,7 @@ async function fetchMembros() {
       defaultItem.pagador_id = membrosOptions.value[0].value;
     }
   } catch (error) {
-    handleApiError(error, "Não foi possível carregar dados do casal.");
+    handleApiError(error, "Não foi possível carregar os dados do grupo.");
   }
 }
 

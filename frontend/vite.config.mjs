@@ -33,9 +33,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.svg"],
       manifest: {
-        name: "Gastos a dois",
-        short_name: "A dois",
-        description: "Gastos compartilhados para casais",
+        name: "Casa em Ordem",
+        short_name: "Casa",
+        description: "Casa em Ordem - Organize sua casa com facilidade",
         theme_color: "#ffffff",
         background_color: "#ffffff",
         display: "standalone",

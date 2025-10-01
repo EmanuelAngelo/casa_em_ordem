@@ -38,14 +38,14 @@
                 class="mb-3"
               />
               <v-text-field
-                v-model="nome_casal"
-                label="Nome do casal (opcional)"
-                prepend-inner-icon="mdi-heart"
+                v-model="nome_grupo"
+                label="Nome do grupo (opcional)"
+                prepend-inner-icon="mdi-home-group"
               />
               <span>
-                Se seu parceiro(a) já
-                <b>criou conta com Nome do casal,</b> deixe em branco</span
-              >
+                Se alguém da casa já
+                <b>criou conta com o nome do grupo,</b> deixe em branco
+              </span>
               <v-btn
                 class="mt-4"
                 color="blue-darken-3"
@@ -83,7 +83,7 @@ const first_name = ref("");
 const username = ref("");
 const email = ref("");
 const password = ref("");
-const nome_casal = ref("");
+const nome_grupo = ref(""); // <-- antes era nome_casal
 const loading = ref(false);
 const error = ref("");
 
@@ -96,7 +96,7 @@ async function onSubmit() {
       username: username.value,
       email: email.value,
       password: password.value,
-      nome_casal: nome_casal.value,
+      nome_grupo: nome_grupo.value, // <-- chave esperada pelo backend
     });
 
     localStorage.setItem("accessToken", data.access);
@@ -111,6 +111,7 @@ async function onSubmit() {
     const pendingToken = localStorage.getItem("pendingInvitationToken");
     if (pendingToken) {
       try {
+        // Mantido como está no seu fluxo; ajuste a rota se necessário no backend
         await axios.post("/convites/aceitar/", { token: pendingToken });
         localStorage.removeItem("pendingInvitationToken");
       } catch (acceptError) {
@@ -124,21 +125,16 @@ async function onSubmit() {
     const redirect = route.query.redirect || "/";
     router.replace(redirect);
   } catch (e) {
-    // --- LÓGICA DE ERRO CORRIGIDA E MAIS ROBUSTA ---
     const errors = e.response?.data;
     let errorMessage =
-      "Não foi possível criar a conta. Verifique os dados e tente novamente."; // Mensagem padrão
+      "Não foi possível criar a conta. Verifique os dados e tente novamente.";
 
     if (errors && typeof errors === "object") {
-      // Pega a primeira chave do objeto de erro (ex: 'username')
       const firstErrorKey = Object.keys(errors)[0];
       const errorMessages = errors[firstErrorKey];
-
-      // Se a chave contiver uma lista de mensagens (padrão do Django), pega a primeira.
       if (Array.isArray(errorMessages) && errorMessages.length > 0) {
         errorMessage = errorMessages[0];
       } else if (typeof errorMessages === "string") {
-        // Se for apenas uma string
         errorMessage = errorMessages;
       }
     }
