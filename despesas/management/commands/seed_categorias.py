@@ -1,13 +1,13 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from despesas.models import Casal
-from despesas.services import criar_categorias_padrao_para_casal # Importa a função central
+from despesas.services import criar_categorias_padrao_para_casal
 
 class Command(BaseCommand):
-    help = "Cria categorias e subcategorias padrão para um casal específico que ainda não as tenha."
+    help = "Cria categorias e subcategorias padrão para um GRUPO (casal) específico."
 
     def add_arguments(self, parser):
-        parser.add_argument('casal_id', type=int, help='O ID do Casal para popular com categorias padrão.')
+        parser.add_argument('casal_id', type=int, help='ID do grupo (casal) a popular com categorias padrão.')
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -15,18 +15,13 @@ class Command(BaseCommand):
         try:
             casal = Casal.objects.get(pk=casal_id)
         except Casal.DoesNotExist:
-            self.stdout.write(self.style.ERROR(f"Casal com ID {casal_id} não encontrado."))
+            self.stdout.write(self.style.ERROR(f"Grupo com ID {casal_id} não encontrado."))
             return
 
-        # Verifica se o casal já tem categorias para não duplicar
         if casal.categorias.exists():
-            self.stdout.write(self.style.WARNING(f"O casal '{casal.nome}' (ID: {casal_id}) já possui categorias. Nenhuma ação foi tomada."))
+            self.stdout.write(self.style.WARNING(f"O grupo '{casal.nome}' (ID: {casal_id}) já possui categorias."))
             return
-            
-        self.stdout.write(f"Criando categorias padrão para o casal '{casal.nome}' (ID: {casal_id})...")
-        
-        criar_categorias_padrao_para_casal(casal)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Categorias padrão criadas com sucesso para o casal ID {casal_id}."
-        ))
+        self.stdout.write(f"Criando categorias padrão para o grupo '{casal.nome}' (ID: {casal_id})...")
+        criar_categorias_padrao_para_casal(casal)
+        self.stdout.write(self.style.SUCCESS("Categorias padrão criadas com sucesso."))
