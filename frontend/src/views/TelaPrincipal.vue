@@ -3,7 +3,7 @@
     <!-- App bar só no mobile -->
     <v-app-bar
       v-if="display.mdAndDown.value"
-      title="Gastos a Dois"
+      title="Casa em Ordem"
       color="blue-darken-3"
       density="compact"
     >
