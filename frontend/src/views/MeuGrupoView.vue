@@ -99,10 +99,9 @@
 
         <!-- Estado 2: Usuário NÃO TEM um casal -->
         <v-alert v-else type="info" variant="tonal" class="pa-4 text-center">
-          <h3 class="text-h6">Você ainda não faz parte de um casal!</h3>
+          <h3 class="text-h6">Você ainda não faz parte de um grupo!</h3>
           <p class="mt-2">
-            Para começar, peça para seu parceiro(a) adicionar você (pelo seu
-            username ou e-mail) ao casal dele(a).
+            Para começar, peça para alguém que já criou um grupo lhe incluir.
           </p>
         </v-alert>
       </v-card-text>

@@ -37,16 +37,35 @@
                 required
                 class="mb-3"
               />
+
+              <!-- Campo do grupo: fica desabilitado até confirmar leitura -->
               <v-text-field
                 v-model="nome_grupo"
                 label="Nome do grupo (opcional)"
                 prepend-inner-icon="mdi-home-group"
+                :disabled="!confirmRead"
               />
-              <span>
-                Se alguém da casa já
-                <b>criou conta com o nome do grupo,</b> deixe em branco
-              </span>
+
+              <!-- Aviso + checkbox de confirmação lado a lado -->
+              <div class="d-flex align-center justify-space-between mt-1">
+                <span class="me-2">
+                  Se alguém da casa já
+                  <b>criou conta com o nome do grupo,</b> deixe em branco
+                </span>
+
+                <v-checkbox
+                  v-model="confirmRead"
+                  hide-details
+                  density="compact"
+                  class="ms-2"
+                  :disabled="loading"
+                  label="Confirmo que li o aviso"
+                />
+              </div>
+
+              <!-- Botão só aparece após confirmar leitura -->
               <v-btn
+                v-if="confirmRead"
                 class="mt-4"
                 color="blue-darken-3"
                 block
@@ -83,11 +102,14 @@ const first_name = ref("");
 const username = ref("");
 const email = ref("");
 const password = ref("");
-const nome_grupo = ref(""); // <-- antes era nome_casal
+const nome_grupo = ref(""); // campo continua opcional
+const confirmRead = ref(false); // <-- novo: confirma a leitura do aviso
 const loading = ref(false);
 const error = ref("");
 
 async function onSubmit() {
+  if (!confirmRead.value) return; // proteção extra, embora o botão só apareça marcado
+
   loading.value = true;
   error.value = "";
   try {
@@ -96,7 +118,7 @@ async function onSubmit() {
       username: username.value,
       email: email.value,
       password: password.value,
-      nome_grupo: nome_grupo.value, // <-- chave esperada pelo backend
+      nome_grupo: nome_grupo.value, // backend aceita vazio -> cria grupo pessoal
     });
 
     localStorage.setItem("accessToken", data.access);
@@ -111,7 +133,6 @@ async function onSubmit() {
     const pendingToken = localStorage.getItem("pendingInvitationToken");
     if (pendingToken) {
       try {
-        // Mantido como está no seu fluxo; ajuste a rota se necessário no backend
         await axios.post("/convites/aceitar/", { token: pendingToken });
         localStorage.removeItem("pendingInvitationToken");
       } catch (acceptError) {
