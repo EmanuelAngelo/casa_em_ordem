@@ -50,17 +50,22 @@
               <div class="d-flex align-center justify-space-between mt-1">
                 <span class="me-2">
                   Se alguém da casa já
-                  <b>criou conta com o nome do grupo,</b> deixe em branco
+                  <b>criou uma conta com o nome do grupo,</b> deixe este campo
+                  em branco. Caso contrário, crie um nome para o grupo de vocês.
                 </span>
-
-                <v-checkbox
-                  v-model="confirmRead"
-                  hide-details
-                  density="compact"
-                  class="ms-2"
-                  :disabled="loading"
-                  label="Confirmo que li o aviso"
-                />
+                <v-tooltip location="top" text="Confirme que leu o aviso para liberar o campo">
+                  <template #activator="{ props }">
+                    <v-checkbox
+                      v-bind="props"
+                      v-model="confirmRead"
+                      hide-details
+                      density="compact"
+                      class="ms-2"
+                      :disabled="loading"
+                      label=""
+                    />
+                  </template>
+                </v-tooltip>
               </div>
 
               <!-- Botão só aparece após confirmar leitura -->
