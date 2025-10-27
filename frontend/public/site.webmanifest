@@ -1,11 +1,12 @@
 {
   "name": "Casa em Ordem",
-  "short_name": "Casa''",
+  "short_name": "Casa",
   "description": "Casa em Ordem - Gerenciamento Financeiro Pessoal",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#02fc1fff",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "lang": "pt-BR",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
