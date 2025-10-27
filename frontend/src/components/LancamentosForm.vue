@@ -7,7 +7,7 @@
     <v-card-text class="pt-4">
       <v-form @submit.prevent="emitSave" :disabled="saving">
         <v-row dense>
-          <!-- 1. SELEÇÃO DO TIPO DE PAGAMENTO -->
+          <!-- Forma de Pagamento -->
           <v-col cols="12">
             <label class="v-label mb-1">Forma de Pagamento</label>
             <v-btn-toggle
@@ -33,7 +33,7 @@
             </div>
           </v-col>
 
-          <!-- 2. CAMPOS COMUNS -->
+          <!-- Campos Comuns -->
           <v-col cols="12">
             <v-text-field
               v-model="local.descricao"
@@ -74,11 +74,11 @@
                   :close-on-content-click="false"
                   transition="scale-transition"
                 >
-                  <template #activator="{ props: menuProps }"
-                    ><v-btn v-bind="menuProps" icon size="small" variant="text"
-                      ><v-icon>mdi-calendar</v-icon></v-btn
-                    ></template
-                  >
+                  <template #activator="{ props: menuProps }">
+                    <v-btn v-bind="menuProps" icon size="small" variant="text">
+                      <v-icon>mdi-calendar</v-icon>
+                    </v-btn>
+                  </template>
                   <v-date-picker
                     v-model="local.competencia"
                     @update:modelValue="menus.competencia = false"
@@ -88,6 +88,7 @@
               </template>
             </v-text-field>
           </v-col>
+
           <v-col cols="12" md="6">
             <v-select
               v-model="local.categoria_id"
@@ -119,7 +120,7 @@
 
           <v-col cols="12"><v-divider class="my-2"></v-divider></v-col>
 
-          <!-- 3. CAMPOS CONDICIONAIS PARA CARTÃO DE CRÉDITO -->
+          <!-- Cartão de Crédito (apenas quando paymentMethod === 'card') -->
           <template v-if="local.paymentMethod === 'card'">
             <v-col cols="12" md="6">
               <v-select
@@ -179,15 +180,16 @@
                     :close-on-content-click="false"
                     transition="scale-transition"
                   >
-                    <template #activator="{ props: menuProps }"
-                      ><v-btn
+                    <template #activator="{ props: menuProps }">
+                      <v-btn
                         v-bind="menuProps"
                         icon
                         size="small"
                         variant="text"
-                        ><v-icon>mdi-calendar</v-icon></v-btn
-                      ></template
-                    >
+                      >
+                        <v-icon>mdi-calendar</v-icon>
+                      </v-btn>
+                    </template>
                     <v-date-picker
                       v-model="local.data_vencimento"
                       @update:modelValue="menus.vencimento = false"
@@ -199,12 +201,13 @@
             </v-col>
           </template>
 
+          <!-- Novo Cartão (toggle) -->
           <v-col cols="12" v-if="local.paymentMethod === 'card' && showNewCard">
             <v-card variant="tonal" class="pa-3">
               <v-row dense>
-                <v-col cols="12">
-                  <div class="text-subtitle-1">Novo Cartão</div>
-                </v-col>
+                <v-col cols="12"
+                  ><div class="text-subtitle-1">Novo Cartão</div></v-col
+                >
                 <v-col cols="12" md="6">
                   <v-text-field
                     v-model="newCard.nome"
@@ -258,16 +261,14 @@
                     :disabled="creatingCard"
                   />
                 </v-col>
-
                 <v-col cols="12" class="d-flex justify-end">
                   <v-btn
                     variant="text"
                     class="me-2"
                     :disabled="creatingCard"
                     @click="cancelNewCard"
+                    >Cancelar</v-btn
                   >
-                    Cancelar
-                  </v-btn>
                   <v-btn
                     color="blue-darken-3"
                     :loading="creatingCard"
@@ -285,7 +286,7 @@
             </v-card>
           </v-col>
 
-          <!-- 4. CAMPOS DE DETALHES -->
+          <!-- Detalhes -->
           <v-col cols="12" md="4">
             <v-select
               v-model="local.escopo"
@@ -400,29 +401,65 @@ function parseISODate(isoString) {
   return date;
 }
 
+/**
+ * 🔧 Pré-preenchimento robusto para edição:
+ * aceita tanto objetos completos quanto apenas IDs vindos do resumo.
+ */
 watch(
-  () => [props.model, props.currentUserId],
-  ([item, userId]) => {
+  () => [props.model, props.currentUserId, props.subcategorias],
+  ([item, userId, subs]) => {
     const isEditing = item && item.id;
 
     if (isEditing) {
       local.id = item.id;
-      local.paymentMethod = item.type === "compra" ? "card" : "cash";
-      local.descricao = item.descricao;
-      local.valor_total = item.valor_total;
+
+      // Detecta se é compra no cartão
+      const isCard =
+        item.type === "compra" ||
+        !!item.compra_cartao ||
+        !!item.compra_cartao_id ||
+        !!item.parcelas_total ||
+        !!item.parcela_numero;
+
+      local.paymentMethod = isCard ? "card" : "cash";
+
+      local.descricao = item.descricao ?? "";
+      local.valor_total = item.valor_total ?? "";
+
       local.competencia = parseISODate(item.competencia);
       local.data_vencimento = parseISODate(
         item.data_vencimento || item.competencia
       );
-      local.subcategoria_id = item.subcategoria?.id;
-      local.categoria_id = item.subcategoria?.categoria?.id;
-      local.escopo = item.escopo;
-      local.pagador_id = item.pagador_id || item.pagador?.id;
-      local.dono_pessoal_id = item.dono_pessoal_id || item.dono_pessoal?.id;
+
+      // Subcategoria/Categoria: aceita objeto ou id
+      const subId = item.subcategoria?.id ?? item.subcategoria_id ?? null;
+      local.subcategoria_id = subId;
+
+      // tenta descobrir categoria a partir da subcategoria (quando vier só id)
+      const subObj =
+        item.subcategoria ??
+        (Array.isArray(subs) ? subs.find((s) => s.id === subId) : null);
+
+      local.categoria_id =
+        item.subcategoria?.categoria?.id ??
+        subObj?.categoria?.id ??
+        subObj?.categoria_id ??
+        null;
+
+      local.escopo = item.escopo ?? "COMP";
+
+      // Quem pagou / dono: aceita objeto ou id
+      local.pagador_id = item.pagador?.id ?? item.pagador_id ?? userId ?? null;
+      local.dono_pessoal_id =
+        item.dono_pessoal?.id ?? item.dono_pessoal_id ?? null;
+
       local.status = item.status || "PENDENTE";
-      local.cartao_id = null;
-      local.parcelas_total = 1;
+
+      // campos de cartão em edição (não obrigatório, mas neutros)
+      local.cartao_id = item.cartao_id ?? null;
+      local.parcelas_total = item.parcelas_total ?? 1;
     } else {
+      // Novo
       local.id = null;
       local.paymentMethod = "cash";
       local.descricao = "";
@@ -440,6 +477,18 @@ watch(
     }
   },
   { immediate: true, deep: true }
+);
+
+// Segurança: ao trocar para "cash", limpa campos de cartão
+watch(
+  () => local.paymentMethod,
+  (pm) => {
+    if (pm === "cash") {
+      local.cartao_id = null;
+      local.parcelas_total = 1;
+      showNewCard.value = false;
+    }
+  }
 );
 
 watch(
@@ -521,11 +570,10 @@ function formatBr(dateValue) {
 }
 
 function emitSave() {
-  let finalPayload = {};
   const isCardPurchase = local.paymentMethod === "card" && !local.id;
 
   if (isCardPurchase) {
-    finalPayload = {
+    emit("save", {
       descricao: local.descricao,
       valor_total: local.valor_total,
       subcategoria_id: local.subcategoria_id,
@@ -537,9 +585,9 @@ function emitSave() {
       pagador_id: local.pagador_id,
       dono_pessoal_id: local.dono_pessoal_id,
       type: "compra",
-    };
+    });
   } else {
-    finalPayload = {
+    emit("save", {
       id: local.id,
       descricao: local.descricao,
       valor_total: local.valor_total,
@@ -551,9 +599,7 @@ function emitSave() {
       dono_pessoal_id: local.dono_pessoal_id,
       status: local.status,
       type: "lancamento",
-    };
+    });
   }
-
-  emit("save", finalPayload);
 }
 </script>

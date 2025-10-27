@@ -44,6 +44,23 @@ class MembroCasal(CarimboTempo):
         pass
     def __str__(self):
         return f"{self.usuario} em {self.casal} ({'ativo' if self.ativo else 'inativo'})"
+    
+
+# 🔹 NOVO: Preferências por usuário (guarda o grupo atual selecionado)
+class PreferenciasUsuario(CarimboTempo):
+    usuario = models.OneToOneField(User, related_name="preferencias", on_delete=models.CASCADE)
+    grupo_atual = models.ForeignKey(
+        Casal,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="usuarios_atuais",
+    )
+    class Meta:
+        verbose_name = "Preferências do usuário"
+        verbose_name_plural = "Preferências dos usuários"
+    def __str__(self):
+        return f"Prefs de {self.usuario} (grupo_atual={self.grupo_atual_id})"
 
 class EscopoDespesa(models.TextChoices):
     COMPARTILHADA = "COMP", "Compartilhada"

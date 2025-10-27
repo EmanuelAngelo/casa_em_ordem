@@ -4,87 +4,101 @@
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Categorias</v-toolbar-title>
         <v-spacer />
-        <v-btn icon @click="fetchCategorias"
-          ><v-icon>mdi-refresh</v-icon></v-btn
-        >
-        <v-btn prepend-icon="mdi-plus" @click="openForm()"
-          >Adicionar Categoria</v-btn
-        >
 
-        <!-- AJUSTADO: abre o dialog de subcategoria -->
-        <v-btn prepend-icon="mdi-shape-outline" @click="openSubForm()">
-          Adicionar Subcategoria
+        <!-- Nova Categoria -->
+        <template v-if="!hasGroup">
+          <v-tooltip text="Crie um grupo para cadastrar categorias">
+            <template #activator="{ props }">
+              <span v-bind="props">
+                <v-btn prepend-icon="mdi-plus" :disabled="true">Nova Categoria</v-btn>
+              </span>
+            </template>
+          </v-tooltip>
+        </template>
+        <template v-else>
+          <v-btn prepend-icon="mdi-plus" @click="openCreateCategoria">Nova Categoria</v-btn>
+        </template>
+
+        <!-- Nova Subcategoria -->
+        <template v-if="!hasGroup">
+          <v-tooltip text="Crie um grupo para cadastrar subcategorias">
+            <template #activator="{ props }">
+              <span v-bind="props">
+                <v-btn prepend-icon="mdi-shape-square-plus" class="ms-2" :disabled="true">
+                  Nova Subcategoria
+                </v-btn>
+              </span>
+            </template>
+          </v-tooltip>
+        </template>
+        <template v-else>
+          <v-btn prepend-icon="mdi-shape-square-plus" class="ms-2" @click="openCreateSubcategoria">
+            Nova Subcategoria
+          </v-btn>
+        </template>
+
+        <!-- Refresh -->
+        <v-btn icon @click="init" :disabled="loading" class="ms-2">
+          <v-icon>mdi-refresh</v-icon>
         </v-btn>
       </v-toolbar>
 
       <v-card-text>
-        <CategoriasList
-          :items="categorias"
-          :loading="loading"
-          @edit="openForm"
-          @delete="confirmDelete"
-        />
+        <!-- Aviso quando NÃO há grupo -->
+        <v-alert
+          v-if="!hasGroup && !loading"
+          type="info"
+          variant="tonal"
+          class="mb-4"
+        >
+          <div class="text-body-1">
+            Você ainda não tem um grupo. Ao <RouterLink to="/meu-grupo">criar um grupo</RouterLink>,
+            as <b>categorias e subcategororias padrão</b> serão criadas automaticamente para você começar.
+          </div>
+        </v-alert>
+
+        <!-- Carregando -->
+        <v-skeleton-loader v-if="loading" type="article, list-item@3" />
+
+        <!-- Lista -->
+        <div v-else>
+          <!-- Passamos a lista como vem da API; o componente normaliza -->
+          <CategoriasList
+            :items="categorias"
+            :loading="loading"
+            @refresh="init"
+            @create="openCreateCategoria"
+            @edit="openEditCategoria"
+            @delete="deleteCategoria"
+          />
+        </div>
       </v-card-text>
     </v-card>
 
-    <!-- Dialog Categoria -->
-    <v-dialog v-model="dialog" persistent max-width="520px">
+    <!-- Dialog: Nova/Editar Categoria -->
+    <v-dialog v-model="categoriaDialog" max-width="520px" persistent>
       <CategoriasForm
-        :model="editedCategoria"
+        :model="categoriaEdit"
         :saving="saving"
-        @close="dialog = false"
+        @close="categoriaDialog = false"
         @save="saveCategoria"
       />
     </v-dialog>
 
-    <!-- Dialog Subcategoria -->
-    <v-dialog v-model="subDialog" persistent max-width="560px">
+    <!-- Dialog: Nova/Editar Subcategoria -->
+    <v-dialog v-model="subcategoriaDialog" max-width="600px" persistent>
       <SubcategoriasForm
-        :model="subEdited"
+        :model="subcategoriaEdit"
         :categorias="categorias"
-        :saving="subSaving"
-        :locked-categoria="lockSubCategoria"
-        @close="subDialog = false"
+        :saving="savingSub"
+        @close="subcategoriaDialog = false"
         @save="saveSubcategoria"
       />
     </v-dialog>
 
-    <!-- Dialog Confirmar Exclusão -->
-    <v-dialog v-model="deleteDialog" persistent max-width="400px">
-      <v-card>
-        <v-card-title class="text-h5">Confirmar Exclusão</v-card-title>
-        <v-card-text
-          >Tem certeza que deseja excluir esta categoria?</v-card-text
-        >
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="deleteDialog = false">Cancelar</v-btn>
-          <v-btn color="red-darken-1" @click="deleteCategoriaConfirmed"
-            >Excluir</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Dialog de Erro -->
-    <v-dialog v-model="errorDialog" persistent max-width="500px">
-      <v-card>
-        <v-card-title class="text-h5 bg-red-darken-2">
-          <v-icon start icon="mdi-alert-circle-outline" />
-          Operação Bloqueada
-        </v-card-title>
-        <v-card-text class="py-4 text-body-1">{{ errorMessage }}</v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn
-            color="blue-darken-1"
-            variant="elevated"
-            @click="errorDialog = false"
-            >Entendi</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000">
+      {{ snackbar.text }}
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -95,127 +109,143 @@ import CategoriasList from "@/components/CategoriasList.vue";
 import CategoriasForm from "@/components/CategoriasForm.vue";
 import SubcategoriasForm from "@/components/SubcategoriasForm.vue";
 
-const categorias = ref([]);
 const loading = ref(false);
+const hasGroup = ref(false);
+
+const categorias = ref([]);
+
+// Categoria dialog
+const categoriaDialog = ref(false);
 const saving = ref(false);
-const dialog = ref(false);
-const deleteDialog = ref(false);
+const categoriaEdit = ref(null);
 
-const editedCategoria = ref({});
-const categoriaToDelete = ref(null);
+// Subcategoria dialog
+const subcategoriaDialog = ref(false);
+const savingSub = ref(false);
+const subcategoriaEdit = ref(null);
 
-const errorDialog = ref(false);
-const errorMessage = ref("");
+const snackbar = ref({ show: false, text: "", color: "success" });
 
-// ---- Subcategoria controls ----
-const subDialog = ref(false);
-const subEdited = ref({ id: null, nome: "", categoria_id: null, ativa: true });
-const subSaving = ref(false);
-const lockSubCategoria = ref(false); // AJUSTE: controla se o select da categoria fica travado
+onMounted(init);
 
-onMounted(fetchCategorias);
-
-async function fetchCategorias() {
+async function init() {
   loading.value = true;
   try {
-    const resp = await axios.get("/categorias/");
-    categorias.value = resp.data?.results ?? resp.data ?? [];
+    // 1) checa grupo atual
+    const { data: grupo } = await axios.get("/grupos/meu/");
+    hasGroup.value = !!grupo;
+
+    // 2) carrega categorias (shape da API)
+    const { data } = await axios.get("/categorias/");
+    categorias.value = data?.results ?? data ?? [];
   } catch (e) {
-    errorMessage.value = "Não foi possível carregar as categorias.";
-    errorDialog.value = true;
+    categorias.value = [];
+    console.error("Falha ao carregar categorias:", e);
   } finally {
     loading.value = false;
   }
 }
 
-function openForm(item = null) {
-  editedCategoria.value = item
-    ? { id: item.id, nome: item.nome, ativa: !!item.ativa }
-    : { id: null, nome: "", ativa: true };
-  dialog.value = true;
+/* ======== Categoria ======== */
+function openCreateCategoria() {
+  if (!hasGroup.value) {
+    snackbar.value = {
+      show: true,
+      text: "Para cadastrar categorias, crie um grupo primeiro.",
+      color: "info",
+    };
+    return;
+  }
+  categoriaEdit.value = { id: null, nome: "", ativa: true };
+  categoriaDialog.value = true;
+}
+
+function openEditCategoria(item) {
+  // item vem normalizado pela lista
+  categoriaEdit.value = { ...item };
+  categoriaDialog.value = true;
 }
 
 async function saveCategoria(payload) {
   saving.value = true;
   try {
-    const body = {
-      id: payload.id ?? undefined,
-      nome: payload.nome,
-      ativa: !!payload.ativa,
+    const url = payload.id ? `/categorias/${payload.id}/` : "/categorias/";
+    const method = payload.id ? "patch" : "post";
+    await axios[method](url, payload);
+    categoriaDialog.value = false;
+    await init();
+    snackbar.value = {
+      show: true,
+      text: "Categoria salva com sucesso.",
+      color: "success",
     };
-    if (body.id) {
-      await axios.patch(`/categorias/${body.id}/`, body);
-      dialog.value = false;
-      await fetchCategorias();
-    } else {
-      const { data: created } = await axios.post("/categorias/", body);
-      dialog.value = false;
-      await fetchCategorias();
-
-      // opcional: já abrir subcategoria com a categoria criada travada
-      openSubForm(created.id); // <-- se não quiser abrir automático, remova esta linha
-    }
   } catch (e) {
-    errorMessage.value = "Não foi possível salvar a categoria.";
-    errorDialog.value = true;
+    console.error("Erro ao salvar categoria:", e);
+    snackbar.value = {
+      show: true,
+      text:
+        e.response?.data?.detail ||
+        "Não foi possível salvar a categoria. Se você estiver sem grupo, crie um grupo para poder cadastrar.",
+      color: "error",
+    };
   } finally {
     saving.value = false;
   }
 }
 
-function confirmDelete(item) {
-  categoriaToDelete.value = item;
-  deleteDialog.value = true;
-}
-
-async function deleteCategoriaConfirmed() {
+async function deleteCategoria(item) {
   try {
-    await axios.delete(`/categorias/${categoriaToDelete.value.id}/`);
-    deleteDialog.value = false;
-    await fetchCategorias();
+    await axios.delete(`/categorias/${item.id}/`);
+    await init();
+    snackbar.value = { show: true, text: "Categoria removida.", color: "success" };
   } catch (e) {
-    deleteDialog.value = false;
-    errorMessage.value =
-      e.response?.data?.detail || "Erro ao excluir a categoria.";
-    errorDialog.value = true;
+    console.error("Erro ao remover categoria:", e);
+    snackbar.value = {
+      show: true,
+      text: e.response?.data?.detail || "Não foi possível remover a categoria.",
+      color: "error",
+    };
   }
 }
 
-// ------- SUBCATEGORIA -------
-
-// ABRIR o dialog corretamente (com ou sem categoria travada)
-function openSubForm(categoriaId = null) {
-  lockSubCategoria.value = !!categoriaId; // trava se veio categoria
-  subEdited.value = {
-    id: null,
-    nome: "",
-    categoria_id: categoriaId, // quando nulo, usuário escolhe no select
-    ativa: true,
-  };
-  subDialog.value = true;
+/* ======== Subcategoria ======== */
+function openCreateSubcategoria() {
+  if (!hasGroup.value) {
+    snackbar.value = {
+      show: true,
+      text: "Para cadastrar subcategorias, crie um grupo primeiro.",
+      color: "info",
+    };
+    return;
+  }
+  subcategoriaEdit.value = { id: null, categoria: null, nome: "", ativa: true };
+  subcategoriaDialog.value = true;
 }
 
 async function saveSubcategoria(payload) {
-  subSaving.value = true;
+  savingSub.value = true;
   try {
-    const body = { ...payload };
-    if (body.id) {
-      await axios.patch(`/subcategorias/${body.id}/`, body);
-    } else {
-      await axios.post("/subcategorias/", body);
-    }
-    // mantém o dialog para cadastrar várias em sequência
-    subEdited.value = {
-      id: null,
-      nome: "",
-      categoria_id: body.categoria_id, // mantém a mesma categoria
-      ativa: true,
+    const url = payload.id ? `/subcategorias/${payload.id}/` : "/subcategorias/";
+    const method = payload.id ? "patch" : "post";
+    await axios[method](url, payload);
+    subcategoriaDialog.value = false;
+    await init();
+    snackbar.value = {
+      show: true,
+      text: "Subcategoria salva com sucesso.",
+      color: "success",
     };
   } catch (e) {
-    errorMessage.value = "Não foi possível salvar a subcategoria.";
-    errorDialog.value = true;
+    console.error("Erro ao salvar subcategoria:", e);
+    snackbar.value = {
+      show: true,
+      text:
+        e.response?.data?.detail ||
+        "Não foi possível salvar. Em modo sem grupo, crie um grupo para cadastrar subcategorias.",
+      color: "error",
+    };
   } finally {
-    subSaving.value = false;
+    savingSub.value = false;
   }
 }
 </script>

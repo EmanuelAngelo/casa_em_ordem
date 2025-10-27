@@ -1,71 +1,42 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
+from rest_framework.exceptions import PermissionDenied
 from .utils import get_casal_ativo_do_usuario
 
 class IsAutenticadoNoSeuCasal(BasePermission):
     """
-    Garante que o usuário está autenticado e tem um grupo ativo.
+    Antes: retornava 403 quando não havia grupo atual.
+    Agora: para métodos de leitura (GET/HEAD/OPTIONS), permite seguir sem grupo (as views devem devolver queryset vazio).
+          Para métodos de escrita, exige grupo atual.
     """
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        return get_casal_ativo_do_usuario(request.user) is not None
-
+        if request.method in SAFE_METHODS:
+            return True  # leitura liberada; a view deve filtrar/vaziar
+        casal = get_casal_ativo_do_usuario(request.user)
+        return casal is not None
 
 class SomenteDoMeuCasal(BasePermission):
     """
-    Verificação em nível de objeto: o objeto deve pertencer ao grupo do usuário.
+    Mantém a checagem de objeto, mas só é chamada quando há objeto.
+    Para escrita, continua exigindo pertencer ao grupo; para leitura, já passamos pelo filtro de queryset.
     """
     def has_object_permission(self, request, view, obj):
-        casal_user = get_casal_ativo_do_usuario(request.user)
-        if casal_user is None:
-            return False
-        # atributo 'casal' direto:
-        objeto_casal = getattr(obj, "casal", None)
-        if objeto_casal:
-            return objeto_casal_id(objeto_casal) == casal_user.id
-
-        from .models import DespesaModelo, RegraRateioPadrao, Categoria
-        if isinstance(obj, DespesaModelo):
-            return obj.casal_id == casal_user.id
-        if isinstance(obj, RegraRateioPadrao):
-            return obj.despesa_modelo.casal_id == casal_user.id
-        if isinstance(obj, Categoria):  # categoria é por grupo
+        if request.method in SAFE_METHODS:
             return True
-
-        return False
-
-
-def objeto_casal_id(casal) -> int | None:
-    try:
-        return casal.id
-    except Exception:
-        return None
-
+        # objetos principais têm 'casal' (grupo) relacionado
+        casal = getattr(obj, "casal", None) or getattr(getattr(obj, "categoria", None), "casal", None)
+        if casal is None:
+            return False
+        from .models import MembroCasal
+        return MembroCasal.objects.filter(casal=casal, usuario=request.user, ativo=True).exists()
 
 class CasalScopedQuerysetMixin:
     """
-    Filtra automaticamente por grupo do usuário e seta grupo no create.
+    Fornece utilitário para as ViewSets limitarem o queryset ao grupo atual.
+    Se não existir grupo, retorna None; a view deve tratar (lista vazia; escrita bloqueada).
     """
-    def get_casal_filter_kwargs(self):
-        return {"casal": self.get_casal_usuario()}
-
     def get_casal_usuario(self):
-        from .utils import get_casal_ativo_do_usuario
         return get_casal_ativo_do_usuario(self.request.user)
 
-    def get_queryset(self):
-        qs = super().get_queryset()
+    def filter_queryset_por_casal(self, qs):
         casal = self.get_casal_usuario()
-        if casal is None:
-            return qs.none()
-        try:
-            return qs.filter(**self.get_casal_filter_kwargs())
-        except Exception:
-            return qs
-
-    def perform_create(self, serializer):
-        casal = self.get_casal_usuario()
-        extra = {}
-        if "criado_por" in [f.name for f in serializer.Meta.model._meta.get_fields()]:
-            extra["criado_por"] = self.request.user
-        serializer.save(casal=casal, **extra)
+        return qs.filter(casal=casal) if casal else qs.none()

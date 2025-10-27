@@ -1,35 +1,58 @@
 from datetime import date
 from decimal import Decimal
-from itertools import chain
-from django.db.models import Sum
-from operator import attrgetter
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Sum, Q
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets, mixins, filters
+from rest_framework import status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.core.mail import send_mail
-from backend import settings
 
 from .models import (
-    CartaoCredito, Casal, Categoria, CompraCartao, MembroCasal, StatusLancamento,
-    Subcategoria, Lancamento, DespesaModelo, RegraRateioPadrao, RateioLancamento,
+    Casal,
+    MembroCasal,
+    Categoria,
+    Subcategoria,
+    DespesaModelo,
+    RegraRateioPadrao,
+    Lancamento,
+    CartaoCredito,
+    CompraCartao,
 )
-from .permissions import IsAutenticadoNoSeuCasal, SomenteDoMeuCasal, CasalScopedQuerysetMixin
+from .permissions import (
+    IsAutenticadoNoSeuCasal,
+    SomenteDoMeuCasal,
+    CasalScopedQuerysetMixin,
+)
 from .serializers import (
-    CartaoCreditoSerializer, CompraCartaoSerializer, RegisterSerializer, CategoriaSerializer,
-    ResumoLancamentoSerializer, SubcategoriaSerializer, LancamentoSerializer, DespesaModeloSerializer,
-    RegraRateioPadraoSerializer, RateioLancamentoSerializer, MembroCasalSerializer, CasalSerializer,
-    ChangePasswordSerializer, UsuarioSlimSerializer,
+    # auth / user
+    RegisterSerializer,
+    ChangePasswordSerializer,
+    UsuarioSlimSerializer,
+    # grupo/morador
+    CasalSerializer,
+    MembroCasalSerializer,
+    # cadastros
+    CategoriaSerializer,
+    SubcategoriaSerializer,
+    DespesaModeloSerializer,
+    RegraRateioPadraoSerializer,
+    # financeiro
+    LancamentoSerializer,
+    CartaoCreditoSerializer,
+    CompraCartaoSerializer,
+    ResumoLancamentoSerializer,
 )
-from .services import criar_rateios_para_lancamento, gerar_lancamentos_competencia, gerar_lancamentos_da_compra, quitar_lancamento
-from .utils import get_casal_ativo_do_usuario, assert_user_pertence_ao_casal
+from .services import criar_categorias_padrao_para_casal
+from .utils import get_casal_ativo_do_usuario
 
 User = get_user_model()
+
+# ---------------------------
+# Auth / Usuário
+# ---------------------------
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -39,22 +62,57 @@ class RegisterView(APIView):
         payload = ser.save()
         return Response(payload, status=status.HTTP_201_CREATED)
 
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.set_password(serializer.validated_data["nova_senha"])
+        user.save()
+        return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
+
+class CurrentUserView(APIView):
+    """
+    GET  /api/users/me/
+    POST /api/users/me/ { "grupo_id": <id> } -> define grupo atual se for membro
+    """
+    permission_classes = [IsAuthenticated]
+    def get(self, request, *args, **kwargs):
+        serializer = UsuarioSlimSerializer(request.user)
+        return Response(serializer.data)
+    def post(self, request, *args, **kwargs):
+        from .models import PreferenciasUsuario
+        grupo_id = request.data.get("grupo_id")
+        if not grupo_id:
+            return Response({"detail": "Informe grupo_id."}, status=400)
+        try:
+            grupo = Casal.objects.get(id=grupo_id)
+        except Casal.DoesNotExist:
+            return Response({"detail": "Grupo não encontrado."}, status=404)
+        if not MembroCasal.objects.filter(casal=grupo, usuario=request.user, ativo=True).exists():
+            return Response({"detail": "Você não pertence a este grupo."}, status=403)
+        prefs, _ = PreferenciasUsuario.objects.get_or_create(usuario=request.user)
+        prefs.grupo_atual = grupo
+        prefs.save(update_fields=["grupo_atual"])
+        return Response({"detail": "Grupo atual definido com sucesso.", "grupo_id": grupo.id})
+
+# ---------------------------
+# Extras do Grupo (convite)
+# ---------------------------
+
 class CasalExtrasViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=["post"], url_path="convidar")
     def convidar(self, request):
-        """
-        Body: { "username_or_email": "alguem" }
-        Adiciona a pessoa ao grupo do usuário (se existir).
-        """
         username_or_email = request.data.get("username_or_email", "").strip()
         if not username_or_email:
             return Response({"detail": "Informe username_or_email."}, status=400)
 
         casal = get_casal_ativo_do_usuario(request.user)
         if not casal:
-            return Response({"detail": "Usuário não possui grupo ativo."}, status=400)
+            return Response({"detail": "Defina/crie um grupo atual para convidar pessoas."}, status=400)
 
         try:
             user = User.objects.get(Q(username=username_or_email) | Q(email=username_or_email))
@@ -64,21 +122,19 @@ class CasalExtrasViewSet(viewsets.ViewSet):
         if MembroCasal.objects.filter(casal=casal, usuario=user).exists():
             return Response({"detail": "Usuário já está neste grupo."}, status=409)
 
-        # (REMOVIDO) antes havia limitação de 2 membros ativos por grupo.
         MembroCasal.objects.create(
             casal=casal,
             usuario=user,
             apelido=user.first_name or user.username,
             ativo=True,
         )
-        return Response({"detail": "Convite concluído. Usuário adicionado ao grupo."}, status=201)
+        return Response({"detail": "Usuário adicionado ao grupo."}, status=201)
+
+# ---------------------------
+# Grupo (Casal) e Moradores
+# ---------------------------
 
 class CasalViewSet(viewsets.ModelViewSet):
-    """
-    Criar e gerenciar seu grupo doméstico.
-    - POST cria o grupo e já vincula o usuário como membro ativo.
-    - GET retorna apenas o grupo ao qual o usuário pertence (o ativo).
-    """
     queryset = Casal.objects.all()
     serializer_class = CasalSerializer
     permission_classes = [IsAuthenticated]
@@ -87,20 +143,32 @@ class CasalViewSet(viewsets.ModelViewSet):
         casal = get_casal_ativo_do_usuario(self.request.user)
         return self.queryset.filter(id=casal.id) if casal else self.queryset.none()
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         casal = serializer.save()
+        # vincula o criador
         MembroCasal.objects.create(
             casal=casal,
-            usuario=self.request.user,
-            apelido=self.request.user.first_name or "",
+            usuario=request.user,
+            apelido=request.user.first_name or request.user.username,
             ativo=True,
         )
+        # popula categorias padrão
+        criar_categorias_padrao_para_casal(casal)
+        # define como grupo atual nas preferências
+        from .models import PreferenciasUsuario
+        prefs, _ = PreferenciasUsuario.objects.get_or_create(usuario=request.user)
+        prefs.grupo_atual = casal
+        prefs.save(update_fields=["grupo_atual"])
+        return Response(self.get_serializer(casal).data, status=201)
 
     @action(detail=False, methods=["get"], url_path="meu")
     def meu(self, request):
         casal = get_casal_ativo_do_usuario(request.user)
         if not casal:
-            return Response({"detail": "Você ainda não está vinculado a um grupo."}, status=404)
+            # 200 com null: modo solo não quebra frontend
+            return Response(None, status=200)
         data = self.get_serializer(casal).data
         return Response(data)
 
@@ -111,184 +179,216 @@ class MembroCasalViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["ativo", "usuario"]
 
-    def perform_create(self, serializer):
+    def get_queryset(self):
+        return self.filter_queryset_por_casal(super().get_queryset())
+
+    def create(self, request, *args, **kwargs):
         casal = self.get_casal_usuario()
-        serializer.save(casal=casal)
+        if not casal:
+            return Response({"detail": "Crie/seleciona um grupo para adicionar moradores."}, status=400)
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(casal=self.get_casal_usuario())
+
+# ---------------------------
+# Cadastros
+# ---------------------------
 
 class CategoriaViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Categoria.objects.all().order_by("nome")
+    queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [filters.SearchFilter]
-    search_fields = ["nome"]
 
-class SubcategoriaViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Subcategoria.objects.select_related("categoria").all().order_by("categoria__nome", "nome")
+    def get_queryset(self):
+        return self.filter_queryset_por_casal(super().get_queryset())
+
+    def create(self, request, *args, **kwargs):
+        if not self.get_casal_usuario():
+            return Response({"detail": "Crie/seleciona um grupo para cadastrar categorias."}, status=400)
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(casal=self.get_casal_usuario())
+
+class SubcategoriaViewSet(viewsets.ModelViewSet):
+    """
+    Não tem 'casal' direto; filtra por categoria__casal.
+    """
+    queryset = Subcategoria.objects.select_related("categoria", "categoria__casal").all()
     serializer_class = SubcategoriaSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
-    search_fields = ["nome", "categoria__nome"]
-    filterset_fields = ["categoria"]
-    def get_casal_filter_kwargs(self):
-        return {"categoria__casal": self.get_casal_usuario()}
-    def perform_create(self, serializer):
-        serializer.save()
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["categoria", "ativa"]
 
-class DespesaModeloViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = DespesaModelo.objects.select_related("casal", "categoria", "dono_pessoal").all()
+    def get_queryset(self):
+        casal = get_casal_ativo_do_usuario(self.request.user)
+        if not casal:
+            return self.queryset.none()
+        return self.queryset.filter(categoria__casal=casal)
+
+    def create(self, request, *args, **kwargs):
+        casal = get_casal_ativo_do_usuario(request.user)
+        if not casal:
+            return Response({"detail": "Crie/seleciona um grupo para cadastrar subcategorias."}, status=400)
+        return super().create(request, *args, **kwargs)
+
+class DespesaModeloViewSet(viewsets.ModelViewSet):
+    """
+    Também filtra por categoria__casal.
+    """
+    queryset = DespesaModelo.objects.select_related("categoria", "categoria__casal").all()
     serializer_class = DespesaModeloSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ["escopo", "categoria", "recorrente", "periodicidade", "ativo"]
-    search_fields = ["nome"]
-    def get_queryset(self):
-        casal = self.get_casal_usuario()
-        return super().get_queryset().filter(casal=casal)
-    def perform_create(self, serializer):
-        casal = self.get_casal_usuario()
-        serializer.save(casal=casal)
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["ativo", "escopo", "categoria"]
 
-class RegraRateioPadraoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = RegraRateioPadrao.objects.select_related("despesa_modelo", "membro").all()
+    def get_queryset(self):
+        casal = get_casal_ativo_do_usuario(self.request.user)
+        if not casal:
+            return self.queryset.none()
+        return self.queryset.filter(categoria__casal=casal)
+
+    def create(self, request, *args, **kwargs):
+        casal = get_casal_ativo_do_usuario(request.user)
+        if not casal:
+            return Response({"detail": "Crie/seleciona um grupo para cadastrar despesas modelo."}, status=400)
+        return super().create(request, *args, **kwargs)
+
+class RegraRateioPadraoViewSet(viewsets.ModelViewSet):
+    queryset = RegraRateioPadrao.objects.select_related(
+        "despesa_modelo", "despesa_modelo__categoria", "despesa_modelo__categoria__casal"
+    ).all()
     serializer_class = RegraRateioPadraoSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["despesa_modelo"]
+
     def get_queryset(self):
-        casal = self.get_casal_usuario()
-        return super().get_queryset().filter(despesa_modelo__casal=casal)
-    def perform_create(self, serializer):
-        serializer.save()
+        casal = get_casal_ativo_do_usuario(self.request.user)
+        if not casal:
+            return self.queryset.none()
+        return self.queryset.filter(despesa_modelo__categoria__casal=casal)
+
+# ---------------------------
+# Financeiro
+# ---------------------------
 
 class LancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Lancamento.objects.select_related("subcategoria", "subcategoria__categoria", "pagador", "dono_pessoal", "criado_por").all()
+    queryset = Lancamento.objects.select_related(
+        "subcategoria",
+        "subcategoria__categoria",
+        "compra_cartao",
+    ).all()
     serializer_class = LancamentoSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    search_fields = ["descricao", "subcategoria__nome", "subcategoria__categoria__nome"]
-    filterset_fields = ["status", "escopo", "subcategoria", "subcategoria__categoria", "competencia", "compra_cartao"]
+    filter_backends = [filters.OrderingFilter, DjangoFilterBackend]
+    ordering_fields = ["competencia", "data_vencimento", "id"]
+    filterset_fields = ["status", "escopo", "subcategoria", "pagador"]
+
     def get_queryset(self):
+        return self.filter_queryset_por_casal(super().get_queryset())
+
+    def create(self, request, *args, **kwargs):
         casal = self.get_casal_usuario()
-        return super().get_queryset().filter(casal=casal)
+        if not casal:
+            return Response({"detail": "Crie/seleciona um grupo para lançar despesas/receitas."}, status=400)
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
-        casal = self.get_casal_usuario()
-        lancamento = serializer.save(casal=casal, criado_por=self.request.user)
-        criar_rateios_para_lancamento(lancamento)
-    def perform_update(self, serializer):
-        lancamento = serializer.save()
-        criar_rateios_para_lancamento(lancamento)
+        serializer.save(casal=self.get_casal_usuario(), criado_por=self.request.user)
+
     @action(detail=True, methods=["post"], url_path="quitar")
     def quitar(self, request, pk=None):
-        lanc = self.get_object()
-        try:
-            quitar_lancamento(lancamento=lanc, pagador=request.user)
-            return Response({"detail": "Lançamento quitado com sucesso."})
-        except Exception as e:
-            return Response({"detail": str(e)}, status=400)
-    @action(detail=False, methods=["post"], url_path="gerar")
-    def gerar(self, request):
-        competencia_str = request.query_params.get("competencia")
-        if not competencia_str:
-            return Response({"detail": "Informe ?competencia=YYYY-MM-01"}, status=400)
-        try:
-            competencia = date.fromisoformat(competencia_str)
-            casal = self.get_casal_usuario()
-            lancamentos_criados = gerar_lancamentos_competencia(casal, competencia, request.user)
-            total = len(lancamentos_criados)
-            return Response({"detail": f"{total} lançamentos gerados para {competencia_str}."})
-        except ValueError:
-            return Response({"detail": "Formato de data inválido. Use YYYY-MM-DD."}, status=400)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=400)
-
-class RateioLancamentoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = RateioLancamento.objects.select_related("lancamento", "membro").all()
-    serializer_class = RateioLancamentoSerializer
-    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["lancamento", "membro"]
-    def get_casal_filter_kwargs(self):
-        return {"lancamento__casal": self.get_casal_usuario()}
+        lancamento = self.get_object()
+        if lancamento.status != "PAGO":
+            lancamento.status = "PAGO"
+            lancamento.save(update_fields=["status"])
+        return Response({"detail": "Quitado com sucesso."})
 
 class CartaoCreditoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = CartaoCredito.objects.select_related("casal").all()
+    queryset = CartaoCredito.objects.all()
     serializer_class = CartaoCreditoSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
+
     def get_queryset(self):
-        return super().get_queryset().filter(casal=self.get_casal_usuario())
+        return self.filter_queryset_por_casal(super().get_queryset())
+
+    def create(self, request, *args, **kwargs):
+        if not self.get_casal_usuario():
+            return Response({"detail": "Crie/seleciona um grupo para cadastrar cartões."}, status=400)
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         serializer.save(casal=self.get_casal_usuario())
 
 class CompraCartaoViewSet(CasalScopedQuerysetMixin, viewsets.ModelViewSet):
-    queryset = CompraCartao.objects.select_related("casal", "cartao", "subcategoria", "pagador", "dono_pessoal").all()
+    queryset = CompraCartao.objects.select_related("cartao", "subcategoria", "subcategoria__categoria").all()
     serializer_class = CompraCartaoSerializer
     permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal, SomenteDoMeuCasal]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ["cartao", "subcategoria", "escopo"]
-    search_fields = ["descricao"]
+
     def get_queryset(self):
-        return super().get_queryset().filter(casal=self.get_casal_usuario())
+        return self.filter_queryset_por_casal(super().get_queryset())
+
+    def create(self, request, *args, **kwargs):
+        if not self.get_casal_usuario():
+            return Response({"detail": "Crie/seleciona um grupo para lançar compras no cartão."}, status=400)
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
-        compra = serializer.save(casal=self.get_casal_usuario())
-        gerar_lancamentos_da_compra(compra, criado_por=self.request.user)
+        serializer.save(casal=self.get_casal_usuario())
+
+# ---------------------------
+# Resumo / Relatório
+# ---------------------------
 
 class ResumoLancamentosView(APIView):
-    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal]
-    def get(self, request, *args, **kwargs):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
         casal = get_casal_ativo_do_usuario(request.user)
         if not casal:
-            return Response([], status=status.HTTP_200_OK)
-        compras = CompraCartao.objects.filter(casal=casal).select_related("subcategoria", "subcategoria__categoria")
-        lancamentos_unicos = Lancamento.objects.filter(casal=casal, compra_cartao__isnull=True).select_related("subcategoria", "subcategoria__categoria")
-        combined_list = sorted(chain(compras, lancamentos_unicos), key=lambda x: x.competencia if isinstance(x, Lancamento) else x.primeira_competencia, reverse=True)
-        serializer = ResumoLancamentoSerializer(combined_list, many=True)
-        return Response(serializer.data)
+            return Response([], status=200)
+        qs = (
+            Lancamento.objects.filter(casal=casal)
+            .values("id", "descricao", "valor_total", "status", "competencia", "data_vencimento")
+            .order_by("-competencia", "-data_vencimento", "-id")[:200]
+        )
+        return Response(list(qs), status=200)
 
 class RelatorioFinanceiroView(APIView):
-    permission_classes = [IsAuthenticated, IsAutenticadoNoSeuCasal]
-    def get(self, request, *args, **kwargs):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
         casal = get_casal_ativo_do_usuario(request.user)
         if not casal:
-            return Response({"detail": "Grupo não encontrado."}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            competencia_str = request.query_params.get("competencia")
-            membro_id_str = request.query_params.get("membro_id")
-            ano, mes = map(int, competencia_str.split('-'))
-        except (ValueError, TypeError):
-            return Response({"detail": "Parâmetro 'competencia' (YYYY-MM) é obrigatório e deve ser válido."}, status=status.HTTP_400_BAD_REQUEST)
-        rateios_qs = RateioLancamento.objects.filter(
-            lancamento__casal=casal,
-            lancamento__competencia__year=ano,
-            lancamento__competencia__month=mes,
-            lancamento__status__in=[StatusLancamento.PAGO, StatusLancamento.PENDENTE]
+            return Response(
+                {"salario_declarado": 0, "total_gasto": 0, "gastos_por_categoria": []},
+                status=200,
+            )
+        competencia = request.query_params.get("competencia")
+        membro_id = request.query_params.get("membro_id")
+
+        qs = Lancamento.objects.filter(casal=casal)
+        if competencia:
+            qs = qs.filter(competencia__startswith=competencia)  # "YYYY-MM"
+        if membro_id and membro_id != "geral":
+            qs = qs.filter(Q(pagador_id=membro_id) | Q(dono_pessoal_id=membro_id))
+
+        total = qs.aggregate(total=Sum("valor_total"))["total"] or 0
+        salario = (
+            MembroCasal.objects.filter(casal=casal, ativo=True).aggregate(total=Sum("salario_mensal"))["total"] or 0
         )
-        membros_do_casal = MembroCasal.objects.filter(casal=casal, ativo=True)
-        salario_total = Decimal("0.00")
-        if membro_id_str and membro_id_str != "geral":
-            try:
-                membro_id = int(membro_id_str)
-                rateios_qs = rateios_qs.filter(membro_id=membro_id)
-                salario_total = membros_do_casal.get(usuario_id=membro_id).salario_mensal
-            except (ValueError, MembroCasal.DoesNotExist):
-                return Response({"detail": "Membro não encontrado."}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            salario_total = membros_do_casal.aggregate(total=Sum('salario_mensal'))['total'] or Decimal("0.00")
-        gastos_por_categoria = rateios_qs.values('lancamento__subcategoria__categoria__nome').annotate(valor_total=Sum('valor')).order_by('-valor_total')
-        total_gasto = rateios_qs.aggregate(total=Sum('valor'))['total'] or Decimal("0.00")
-        return Response({"salario_declarado": salario_total, "total_gasto": total_gasto, "gastos_por_categoria": list(gastos_por_categoria)})
-
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-    def post(self, request, *args, **kwargs):
-        serializer = ChangePasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = request.user
-        user.set_password(serializer.validated_data['nova_senha'])
-        user.save()
-        return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
-
-class CurrentUserView(APIView):
-    permission_classes = [IsAuthenticated]
-    def get(self, request, *args, **kwargs):
-        serializer = UsuarioSlimSerializer(request.user)
-        return Response(serializer.data)
+        por_cat = (
+            qs.values("subcategoria__categoria__nome")
+            .annotate(valor_total=Sum("valor_total"))
+            .order_by("-valor_total")
+        )
+        data = {
+            "salario_declarado": float(salario),
+            "total_gasto": float(total),
+            "gastos_por_categoria": [
+                {
+                    "lancamento__subcategoria__categoria__nome": row["subcategoria__categoria__nome"],
+                    "valor_total": float(row["valor_total"]),
+                }
+                for row in por_cat
+            ],
+        }
+        return Response(data, status=200)

@@ -4,69 +4,67 @@
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Meu Grupo</v-toolbar-title>
         <v-spacer />
+
+        <!-- Botão só aparece quando NÃO há grupo -->
+        <v-btn
+          v-if="!hasGrupo"
+          prepend-icon="mdi-account-multiple-plus"
+          @click="createDialog = true"
+        >
+          Criar Grupo
+        </v-btn>
+
         <v-btn prepend-icon="mdi-lock" @click="passwordDialog = true">
           Alterar Senha
         </v-btn>
-        <v-btn icon @click="loadCasal" :disabled="saving || loading"
-          ><v-icon>mdi-refresh</v-icon></v-btn
-        >
+        <v-btn icon @click="loadGrupo" :disabled="saving || loading">
+          <v-icon>mdi-refresh</v-icon>
+        </v-btn>
       </v-toolbar>
 
       <v-card-text>
-        <v-skeleton-loader
-          v-if="loading"
-          type="article, actions"
-        ></v-skeleton-loader>
+        <v-skeleton-loader v-if="loading" type="article, actions" />
 
-        <!-- Estado 1: Usuário TEM um casal (grupo) -->
-        <v-row v-else-if="casal">
-          <!-- Coluna Esquerda: Informações e Salários -->
-          <v-col cols="12" :lg="isCasalFull ? 12 : 6">
-            <div>
+        <!-- Estado: já tem grupo -->
+        <v-row v-else-if="grupo">
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="grupo.nome"
+              label="Nome do Grupo"
+              variant="outlined"
+              density="compact"
+              class="mb-4"
+            />
+            <v-list-subheader>Moradores e Salários</v-list-subheader>
+            <div v-for="m in grupo.membros" :key="m.id" class="mb-3">
               <v-text-field
-                v-model="casal.nome"
-                label="Nome do Grupo"
-                prepend-inner-icon="mdi-home-group"
-                variant="outlined"
+                v-model.number="m.salario_mensal"
+                :label="`Salário de ${
+                  m.usuario.first_name || m.usuario.username
+                }`"
+                type="number"
+                step="0.01"
+                prefix="R$"
                 density="compact"
-                class="mb-4"
+                variant="outlined"
+                hide-details
               />
-              <v-list-subheader>Membros e Salários</v-list-subheader>
-              <div
-                v-for="membro in casal.membros"
-                :key="membro.id"
-                class="mb-3"
-              >
-                <v-text-field
-                  v-model.number="membro.salario_mensal"
-                  :label="`Salário de ${
-                    membro.usuario.first_name || membro.usuario.username
-                  }`"
-                  type="number"
-                  step="0.01"
-                  prefix="R$"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                />
-              </div>
-              <v-btn
-                color="blue-darken-3"
-                :loading="saving"
-                @click="saveMembros"
-                class="mt-2"
-              >
-                Salvar Alterações
-              </v-btn>
             </div>
+            <v-btn
+              color="blue-darken-3"
+              :loading="saving"
+              @click="saveMoradores"
+              class="mt-2"
+            >
+              Salvar Alterações
+            </v-btn>
           </v-col>
 
-          <!-- Coluna Direita: Convite (sem limite de membros agora) -->
-          <v-col cols="12" lg="6" v-if="!isCasalFull">
+          <v-col cols="12" md="6">
             <v-card variant="outlined" class="fill-height">
-              <v-card-title>Adicionar membros</v-card-title>
+              <v-card-title>Adicionar morador</v-card-title>
               <v-card-subtitle
-                >Adicione um usuário já cadastrado.</v-card-subtitle
+                >Adicione um usuário já cadastrado</v-card-subtitle
               >
               <v-card-text>
                 <v-form @submit.prevent="onInvite" :disabled="loadingInvite">
@@ -97,22 +95,51 @@
           </v-col>
         </v-row>
 
-        <!-- Estado 2: Usuário NÃO TEM um casal -->
+        <!-- Estado: não tem grupo -->
         <v-alert v-else type="info" variant="tonal" class="pa-4 text-center">
-          <h3 class="text-h6">Você ainda não faz parte de um grupo!</h3>
+          <h3 class="text-h6">Você ainda não tem um grupo.</h3>
           <p class="mt-2">
-            Para começar, peça para alguém que já criou um grupo lhe incluir.
+            Crie um grupo agora para começar a organizar as finanças da casa.
           </p>
+          <v-btn
+            v-if="!hasGrupo"
+            color="blue-darken-3"
+            class="mt-2"
+            @click="createDialog = true"
+          >
+            Criar Grupo
+          </v-btn>
         </v-alert>
       </v-card-text>
     </v-card>
 
-    <!-- DIALOG PARA ALTERAR SENHA -->
+    <!-- Criar Grupo -->
+    <v-dialog v-model="createDialog" persistent max-width="480px">
+      <v-card>
+        <v-card-title>Criar novo grupo</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="novoGrupoNome"
+            label="Nome do grupo"
+            prepend-inner-icon="mdi-home-group"
+            autofocus
+            required
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="createDialog = false">Cancelar</v-btn>
+          <v-btn color="blue-darken-3" :loading="creating" @click="createGrupo"
+            >Criar</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Alterar senha -->
     <v-dialog v-model="passwordDialog" persistent max-width="500px">
       <v-card>
-        <v-card-title>
-          <span class="text-h5">Alterar Senha</span>
-        </v-card-title>
+        <v-card-title><span class="text-h5">Alterar Senha</span></v-card-title>
         <v-card-text>
           <v-form @submit.prevent="changePassword" :disabled="savingPassword">
             <v-text-field
@@ -136,15 +163,10 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
+          <v-btn variant="text" @click="passwordDialog = false">Cancelar</v-btn>
           <v-btn
-            color="blue-darken-1"
             variant="text"
-            @click="passwordDialog = false"
-            >Cancelar</v-btn
-          >
-          <v-btn
             color="blue-darken-1"
-            variant="text"
             :loading="savingPassword"
             @click="changePassword"
           >
@@ -164,72 +186,96 @@
 import { ref, reactive, onMounted, computed } from "vue";
 import axios from "@/api/axios";
 
-const casal = ref(null);
+const grupo = ref(null);
 const loading = ref(true);
 const saving = ref(false);
 const loadingInvite = ref(false);
 const usernameOrEmail = ref("");
 const inviteMsg = ref("");
 const inviteType = ref("info");
+
+const createDialog = ref(false);
+const novoGrupoNome = ref("");
+const creating = ref(false);
+
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
-// --- Refs para o dialog de senha ---
+// senha
 const passwordDialog = ref(false);
 const savingPassword = ref(false);
 const passwordForm = reactive({ nova_senha: "", confirmacao_senha: "" });
 const passwordErrors = ref({});
 
-// --- Agora, sem limite de membros no grupo ---
-const isCasalFull = computed(() => false);
+// computed para facilitar o controle do botão
+const hasGrupo = computed(() => !!grupo.value);
 
-onMounted(loadCasal);
+onMounted(loadGrupo);
 
-async function loadCasal() {
+async function loadGrupo() {
   loading.value = true;
   try {
-    // TROCA: /casais/meu/ -> /grupos/meu/
+    // /grupos/meu/ retorna 200 com null quando não há grupo
     const { data } = await axios.get("/grupos/meu/");
-    casal.value = data;
+    grupo.value = data;
   } catch (e) {
-    casal.value = null;
-    console.error("Não foi possível carregar dados do casal:", e);
+    grupo.value = null;
+    console.error("Não foi possível carregar dados do grupo:", e);
   } finally {
     loading.value = false;
   }
 }
 
-async function saveMembros() {
-  if (!casal.value?.id) {
-    snackbar.value = {
-      show: true,
-      text: "Erro: ID do casal não encontrado para salvar.",
-      color: "error",
-    };
+async function createGrupo() {
+  if (!novoGrupoNome.value?.trim()) {
+    snackbar.show = true;
+    snackbar.text = "Informe um nome para o grupo.";
+    snackbar.color = "error";
+    return;
+  }
+  creating.value = true;
+  try {
+    const { data } = await axios.post("/grupos/", {
+      nome: novoGrupoNome.value.trim(),
+    });
+    snackbar.show = true;
+    snackbar.text = "Grupo criado com sucesso!";
+    snackbar.color = "success";
+    createDialog.value = false;
+    novoGrupoNome.value = "";
+    await loadGrupo(); // ao carregar, hasGrupo fica true e o botão some
+  } catch (e) {
+    snackbar.show = true;
+    snackbar.text =
+      e.response?.data?.detail || "Não foi possível criar o grupo.";
+    snackbar.color = "error";
+  } finally {
+    creating.value = false;
+  }
+}
+
+async function saveMoradores() {
+  if (!grupo.value?.id) {
+    snackbar.show = true;
+    snackbar.text = "Grupo não encontrado.";
+    snackbar.color = "error";
     return;
   }
   saving.value = true;
   try {
-    // TROCA: /casais/:id/ -> /grupos/:id/
-    await axios.patch(`/grupos/${casal.value.id}/`, { nome: casal.value.nome });
-
-    // TROCA: /membros/:id/ -> /moradores/:id/
-    const promises = casal.value.membros.map((membro) =>
-      axios.patch(`/moradores/${membro.id}/`, {
-        salario_mensal: membro.salario_mensal || 0,
+    await axios.patch(`/grupos/${grupo.value.id}/`, { nome: grupo.value.nome });
+    const promises = (grupo.value.membros || []).map((m) =>
+      axios.patch(`/moradores/${m.id}/`, {
+        salario_mensal: m.salario_mensal || 0,
       })
     );
     await Promise.all(promises);
-
-    snackbar.value = {
-      show: true,
-      text: "Dados do casal salvos com sucesso!",
-      color: "success",
-    };
+    snackbar.show = true;
+    snackbar.text = "Dados do grupo salvos!";
+    snackbar.color = "success";
   } catch (e) {
-    console.error("Erro ao salvar dados do casal:", e);
-    const detail =
-      e.response?.data?.detail || "Erro ao salvar os dados. Tente novamente.";
-    snackbar.value = { show: true, text: detail, color: "error" };
+    snackbar.show = true;
+    snackbar.text = e.response?.data?.detail || "Erro ao salvar dados.";
+    snackbar.color = "error";
   } finally {
     saving.value = false;
   }
@@ -240,15 +286,13 @@ async function onInvite() {
   inviteType.value = "info";
   loadingInvite.value = true;
   try {
-    // já estava correto, só garantir que usamos axios
     const { data } = await axios.post("/grupos-extras/convidar/", {
       username_or_email: usernameOrEmail.value,
     });
-
-    inviteMsg.value = data.detail || "Usuário adicionado ao casal.";
+    inviteMsg.value = data.detail || "Usuário adicionado ao grupo.";
     inviteType.value = "success";
     usernameOrEmail.value = "";
-    await loadCasal();
+    await loadGrupo();
   } catch (e) {
     inviteMsg.value =
       e.response?.data?.detail || "Não foi possível adicionar o usuário.";
@@ -263,16 +307,13 @@ async function changePassword() {
   passwordErrors.value = {};
   try {
     const { data } = await axios.post("/auth/change-password/", passwordForm);
-    snackbar.value = {
-      show: true,
-      text: data.detail || "Senha alterada!",
-      color: "success",
-    };
+    snackbar.show = true;
+    snackbar.text = data.detail || "Senha alterada!";
+    snackbar.color = "success";
     passwordForm.nova_senha = "";
     passwordForm.confirmacao_senha = "";
-    passwordDialog.value = false; // Fecha o dialog ao salvar
+    passwordDialog.value = false;
   } catch (e) {
-    console.error("Erro ao alterar senha:", e);
     const errors = e.response?.data;
     if (errors && typeof errors === "object") {
       const firstErrorKey = Object.keys(errors)[0];
@@ -280,14 +321,14 @@ async function changePassword() {
       const detail = Array.isArray(errorMessages)
         ? errorMessages[0]
         : errorMessages;
-      snackbar.value = { show: true, text: detail, color: "error" };
+      snackbar.show = true;
+      snackbar.text = detail || "Não foi possível alterar a senha.";
+      snackbar.color = "error";
       passwordErrors.value = errors;
     } else {
-      snackbar.value = {
-        show: true,
-        text: "Não foi possível alterar a senha.",
-        color: "error",
-      };
+      snackbar.show = true;
+      snackbar.text = "Não foi possível alterar a senha.";
+      snackbar.color = "error";
     }
   } finally {
     savingPassword.value = false;

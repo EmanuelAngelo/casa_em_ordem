@@ -4,64 +4,80 @@
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Subcategorias</v-toolbar-title>
         <v-spacer />
-        <v-btn icon @click="fetchAll"><v-icon>mdi-refresh</v-icon></v-btn>
-        <v-btn prepend-icon="mdi-plus" @click="openForm()"
-          >Adicionar Subcategoria</v-btn
-        >
+
+        <!-- Botão criar subcategoria: habilita se tiver grupo, senão tooltip -->
+        <template v-if="!hasGroup">
+          <v-tooltip text="Crie um grupo para cadastrar subcategorias">
+            <template #activator="{ props }">
+              <span v-bind="props">
+                <v-btn prepend-icon="mdi-plus" :disabled="true"
+                  >Nova Subcategoria</v-btn
+                >
+              </span>
+            </template>
+          </v-tooltip>
+        </template>
+        <template v-else>
+          <v-btn prepend-icon="mdi-plus" @click="openCreate"
+            >Nova Subcategoria</v-btn
+          >
+        </template>
+
+        <v-btn icon @click="init" :disabled="loading" class="ms-2">
+          <v-icon>mdi-refresh</v-icon>
+        </v-btn>
       </v-toolbar>
 
       <v-card-text>
-        <SubcategoriasList
-          :items="subcategorias"
-          :loading="loading"
-          @edit="openForm"
-          @delete="confirmDelete"
-        />
+        <!-- Aviso quando NÃO há grupo -->
+        <v-alert
+          v-if="!hasGroup && !loading"
+          type="info"
+          variant="tonal"
+          class="mb-4"
+        >
+          <div class="text-body-1">
+            Você ainda não tem um grupo. Ao
+            <RouterLink to="/meu-grupo">criar um grupo</RouterLink>, as
+            <b>categorias e subcategorias padrão</b> serão criadas
+            automaticamente.
+          </div>
+        </v-alert>
+
+        <!-- Carregando -->
+        <v-skeleton-loader
+          v-if="loading"
+          type="article, list-item@3"
+        ></v-skeleton-loader>
+
+        <!-- Conteúdo -->
+        <div v-else>
+          <SubcategoriasList
+            :items="subcategorias"
+            :categorias="categoriasOptions"
+            :loading="loading"
+            @refresh="init"
+            @create="openCreate"
+            @edit="openEdit"
+            @delete="onDelete"
+          />
+        </div>
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" persistent max-width="560px">
+    <v-dialog v-model="formDialog" max-width="600px" persistent>
       <SubcategoriasForm
-        :model="edited"
-        :categorias="categorias"
+        :model="editedItem"
+        :categorias="categoriasOptions"
         :saving="saving"
-        @close="dialog = false"
-        @save="save"
+        @close="formDialog = false"
+        @save="onSave"
       />
     </v-dialog>
 
-    <v-dialog v-model="deleteDialog" persistent max-width="400px">
-      <v-card>
-        <v-card-title class="text-h5">Confirmar Exclusão</v-card-title>
-        <v-card-text
-          >Tem certeza que deseja excluir esta subcategoria?</v-card-text
-        >
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="deleteDialog = false">Cancelar</v-btn>
-          <v-btn color="red-darken-1" @click="removeConfirmed">Excluir</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog v-model="errorDialog" persistent max-width="500px">
-      <v-card>
-        <v-card-title class="text-h5 bg-red-darken-2">
-          <v-icon start icon="mdi-alert-circle-outline" />
-          Operação Bloqueada
-        </v-card-title>
-        <v-card-text class="py-4 text-body-1">{{ errorMessage }}</v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn
-            color="blue-darken-1"
-            variant="elevated"
-            @click="errorDialog = false"
-            >Entendi</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="4000">
+      {{ snackbar.text }}
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -71,85 +87,111 @@ import axios from "@/api/axios";
 import SubcategoriasList from "@/components/SubcategoriasList.vue";
 import SubcategoriasForm from "@/components/SubcategoriasForm.vue";
 
-const categorias = ref([]);
-const subcategorias = ref([]);
-
 const loading = ref(false);
 const saving = ref(false);
-const dialog = ref(false);
-const deleteDialog = ref(false);
+const hasGroup = ref(false);
 
-const edited = ref({});
-const toDelete = ref(null);
+const subcategorias = ref([]);
+const categoriasOptions = ref([]);
 
-const errorDialog = ref(false);
-const errorMessage = ref("");
+const formDialog = ref(false);
+const editedItem = ref(null);
 
-onMounted(fetchAll);
+const snackbar = ref({ show: false, text: "", color: "success" });
 
-async function fetchAll() {
+onMounted(init);
+
+async function init() {
   loading.value = true;
   try {
-    const [cats, subs] = await Promise.all([
-      axios.get("/categorias/"),
-      axios.get("/subcategorias/"),
-    ]);
-    categorias.value = cats.data?.results ?? cats.data ?? [];
-    subcategorias.value = subs.data?.results ?? subs.data ?? [];
+    const { data: grupo } = await axios.get("/grupos/meu/");
+    hasGroup.value = !!grupo;
+
+    const { data: cats } = await axios.get("/categorias/");
+    const categorias = cats?.results ?? cats ?? [];
+    categoriasOptions.value = categorias.map((c) => ({
+      label: c.nome,
+      value: c.id,
+    }));
+
+    const { data: subs } = await axios.get("/subcategorias/");
+    subcategorias.value = subs?.results ?? subs ?? [];
   } catch (e) {
-    errorMessage.value = "Não foi possível carregar os dados.";
-    errorDialog.value = true;
+    subcategorias.value = [];
+    categoriasOptions.value = [];
+    console.error("Falha ao carregar subcategorias:", e);
   } finally {
     loading.value = false;
   }
 }
 
-function openForm(item = null) {
-  edited.value = item
-    ? {
-        id: item.id,
-        nome: item.nome,
-        categoria_id: item.categoria?.id ?? null,
-        ativa: !!item.ativa,
-      }
-    : { id: null, nome: "", categoria_id: null, ativa: true };
-  dialog.value = true;
+function openCreate() {
+  if (!hasGroup.value) {
+    snackbar.value = {
+      show: true,
+      text: "Para cadastrar subcategorias, crie um grupo primeiro.",
+      color: "info",
+    };
+    return;
+  }
+  editedItem.value = { id: null, categoria: null, nome: "", ativa: true };
+  formDialog.value = true;
 }
 
-async function save(payload) {
+function openEdit(item) {
+  editedItem.value = {
+    ...item,
+    categoria: item.categoria?.id || item.categoria,
+  };
+  formDialog.value = true;
+}
+
+async function onSave(payload) {
   saving.value = true;
   try {
-    const body = { ...payload };
-    if (body.id) {
-      await axios.patch(`/subcategorias/${body.id}/`, body);
-    } else {
-      await axios.post("/subcategorias/", body);
-    }
-    dialog.value = false;
-    await fetchAll();
+    const url = payload.id
+      ? `/subcategorias/${payload.id}/`
+      : "/subcategorias/";
+    const method = payload.id ? "patch" : "post";
+    await axios[method](url, payload);
+    formDialog.value = false;
+    await init();
+    snackbar.value = {
+      show: true,
+      text: "Subcategoria salva com sucesso.",
+      color: "success",
+    };
   } catch (e) {
-    errorMessage.value = "Não foi possível salvar a subcategoria.";
-    errorDialog.value = true;
+    console.error("Erro ao salvar subcategoria:", e);
+    snackbar.value = {
+      show: true,
+      text:
+        e.response?.data?.detail ||
+        "Não foi possível salvar. Em modo sem grupo, crie um grupo para cadastrar subcategorias.",
+      color: "error",
+    };
   } finally {
     saving.value = false;
   }
 }
 
-function confirmDelete(item) {
-  toDelete.value = item;
-  deleteDialog.value = true;
-}
-
-async function removeConfirmed() {
+async function onDelete(item) {
   try {
-    await axios.delete(`/subcategorias/${toDelete.value.id}/`);
-    deleteDialog.value = false;
-    await fetchAll();
+    await axios.delete(`/subcategorias/${item.id}/`);
+    await init();
+    snackbar.value = {
+      show: true,
+      text: "Subcategoria removida.",
+      color: "success",
+    };
   } catch (e) {
-    deleteDialog.value = false;
-    errorMessage.value =
-      e.response?.data?.detail || "Erro ao excluir subcategoria.";
-    errorDialog.value = true;
+    console.error("Erro ao remover subcategoria:", e);
+    snackbar.value = {
+      show: true,
+      text:
+        e.response?.data?.detail || "Não foi possível remover a subcategoria.",
+      color: "error",
+    };
   }
 }
 </script>

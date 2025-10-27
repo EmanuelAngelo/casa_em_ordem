@@ -1,147 +1,237 @@
 <template>
   <v-data-table
     :headers="headers"
-    :items="items"
+    :items="rows"
     :loading="loading"
+    item-key="id"
+    density="comfortable"
     class="elevation-1"
-    item-value="id"
-    density="compact"
   >
-    <template #loading>
-      <v-skeleton-loader type="table-row@5" />
-    </template>
-
     <template #item.descricao="{ item }">
-      <v-icon v-if="item.type === 'compra'" start size="small" color="grey"
-        >mdi-credit-card-multiple-outline</v-icon
-      >
-      <v-icon v-else start size="small" color="grey">mdi-cash</v-icon>
-      {{ item.descricao }}
+      <div class="d-flex align-center">
+        <v-icon
+          v-if="item.status === 'PAGO'"
+          size="18"
+          color="green"
+          class="me-1"
+        >
+          {{ iconsLocal.statusPaid }}
+        </v-icon>
+        <v-icon
+          v-else-if="item.status === 'PENDENTE'"
+          size="18"
+          color="orange"
+          class="me-1"
+        >
+          {{ iconsLocal.statusPending }}
+        </v-icon>
+        <v-icon v-else size="18" color="grey" class="me-1">
+          {{ iconsLocal.statusCanceled }}
+        </v-icon>
+        <span>{{ item.descricao || "—" }}</span>
+      </div>
     </template>
 
     <template #item.competencia="{ item }">
-      {{ formatDate(item.competencia) }}
+      <span>{{ fmtMonth(item.competencia) }}</span>
     </template>
 
-    <template #item.parcelas_total="{ item }">
-      <v-chip v-if="item.parcelas_total > 1" size="small" label>
-        {{ item.parcelas_total }}x
-      </v-chip>
-      <span v-else>Única</span>
+    <template #item.data_vencimento="{ item }">
+      <span>{{ fmtDate(item.data_vencimento) }}</span>
     </template>
 
     <template #item.valor_total="{ item }">
-      <span class="font-weight-bold">{{
-        formatCurrency(item.valor_total)
+      <span class="font-weight-medium">{{
+        fmtCurrency(item.valor_total)
       }}</span>
     </template>
 
     <template #item.status="{ item }">
-      <v-chip :color="statusColor(item.status)" size="small" label>
-        {{ statusLabel(item.status) }}
+      <v-chip
+        :color="chipColor(item.status)"
+        size="small"
+        label
+        variant="tonal"
+      >
+        {{ item.status }}
       </v-chip>
     </template>
 
-    <template #item.actions="{ item }">
-      <!-- Botão de detalhes SÓ para compras parceladas -->
-      <v-icon
-        v-if="item.type === 'compra'"
-        size="small"
-        class="me-2"
-        color="blue-darken-2"
-        @click="$emit('view-details', item)"
-        title="Ver Parcelas"
-      >
-        mdi-playlist-check
-      </v-icon>
+    <template #item.acoes="{ item }">
+      <div class="d-flex justify-end">
+        <v-tooltip :text="tooltips.details" v-if="item.__isCard">
+          <template #activator="{ props }">
+            <span v-bind="props">
+              <v-btn
+                variant="text"
+                density="comfortable"
+                size="small"
+                class="me-1"
+                @click="$emit('view-details', item)"
+              >
+                <v-icon>{{ iconsLocal.details }}</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
 
-      <!-- Ações padrão (editar, quitar, excluir) SÓ para lançamentos únicos -->
-      <template v-if="item.type === 'lancamento'">
-        <v-icon
-          size="small"
-          class="me-2"
-          @click="$emit('edit', item)"
-          title="Editar"
-          >mdi-pencil</v-icon
+        <v-tooltip :text="tooltips.edit">
+          <template #activator="{ props }">
+            <span v-bind="props">
+              <v-btn
+                variant="text"
+                density="comfortable"
+                size="small"
+                class="me-1"
+                @click="$emit('edit', item)"
+              >
+                <v-icon>{{ iconsLocal.edit }}</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip
+          :text="item.status === 'PAGO' ? tooltips.alreadyPaid : tooltips.pay"
         >
-        <v-icon
-          v-if="item.status !== 'PAGO'"
-          size="small"
-          class="me-2"
-          color="green"
-          @click="$emit('quit', item)"
-          title="Quitar"
-        >
-          mdi-check-decagram
-        </v-icon>
-        <!-- A deleção de compras parceladas deve ser tratada com mais cuidado, por isso não está aqui -->
-      </template>
+          <template #activator="{ props }">
+            <span v-bind="props">
+              <v-btn
+                variant="text"
+                density="comfortable"
+                size="small"
+                :disabled="item.status === 'PAGO'"
+                @click="$emit('quit', item)"
+              >
+                <v-icon>{{ iconsLocal.pay }}</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
+      </div>
+    </template>
+
+    <template #no-data>
+      <div class="text-center pa-6">Nenhum lançamento encontrado.</div>
     </template>
   </v-data-table>
 </template>
 
 <script setup>
-defineProps({
-  items: { type: Array, default: () => [] },
+import { computed } from "vue";
+
+const props = defineProps({
+  items: { type: [Array, Object], default: () => [] },
   loading: { type: Boolean, default: false },
+  icons: {
+    type: Object,
+    default: () => ({
+      details: "mdi-eye-outline",
+      edit: "mdi-pencil-outline",
+      pay: "mdi-cash-check",
+      statusPaid: "mdi-check-circle-outline",
+      statusPending: "mdi-clock-outline",
+      statusCanceled: "mdi-cancel",
+    }),
+  },
+  tooltips: {
+    type: Object,
+    default: () => ({
+      details: "Detalhes / Parcelas",
+      edit: "Editar",
+      pay: "Quitar",
+      alreadyPaid: "Já quitado",
+    }),
+  },
 });
 
 defineEmits(["edit", "quit", "view-details"]);
 
+const iconsLocal = computed(() => ({
+  details: props.icons.details || "mdi-eye-outline",
+  edit: props.icons.edit || "mdi-pencil-outline",
+  pay: props.icons.pay || "mdi-cash-check",
+  statusPaid: props.icons.statusPaid || "mdi-check-circle-outline",
+  statusPending: props.icons.statusPending || "mdi-clock-outline",
+  statusCanceled: props.icons.statusCanceled || "mdi-cancel",
+}));
+
 const headers = [
-  { title: "Descrição", key: "descricao", minWidth: "250px" },
-  { title: "Categoria", key: "subcategoria.categoria.nome" },
-  { title: "Competência", key: "competencia" },
-  { title: "Parcelas", key: "parcelas_total", align: "center" },
-  { title: "Valor Total", key: "valor_total", align: "end" },
-  { title: "Status", key: "status", align: "center" },
-  {
-    title: "Ações",
-    key: "actions",
-    sortable: false,
-    align: "end",
-    width: "120px",
-  },
+  { title: "Descrição", key: "descricao", align: "start" },
+  { title: "Competência", key: "competencia", align: "start" },
+  { title: "Vencimento", key: "data_vencimento", align: "start" },
+  { title: "Valor", key: "valor_total", align: "end" },
+  { title: "Status", key: "status", align: "start" },
+  { title: "Ações", key: "acoes", align: "end", sortable: false },
 ];
 
-const statusOptions = [
-  { label: "Pendente", value: "PENDENTE" },
-  { label: "Pago", value: "PAGO" },
-  { label: "Cancelado", value: "CANCELADO" },
-  { label: "Parcelada", value: "PARCELADA" },
-];
+const rows = computed(() => {
+  const list = Array.isArray(props.items)
+    ? props.items
+    : props.items?.results ?? [];
 
-function statusLabel(s) {
-  return statusOptions.find((o) => o.value === s)?.label || s;
-}
-function statusColor(s) {
-  switch (s) {
-    case "PAGO":
-      return "green";
-    case "CANCELADO":
-      return "red";
-    case "PARCELADA":
-      return "blue";
-    default:
-      return "orange";
-  }
+  return (list || []).map((i, idx) => {
+    const isCard =
+      i?.type === "compra" ||
+      !!i?.compra_cartao ||
+      !!i?.compra_cartao_id ||
+      !!i?.parcelas_total ||
+      !!i?.parcela_numero;
+
+    return {
+      id: i.id ?? idx,
+      descricao: i.descricao ?? "",
+      valor_total: toNumber(i.valor_total),
+      status: i.status ?? "PENDENTE",
+      competencia: i.competencia ?? null,
+      data_vencimento: i.data_vencimento ?? null,
+      __isCard: isCard,
+      raw: i,
+    };
+  });
+});
+
+function toNumber(v) {
+  if (v === null || v === undefined) return 0;
+  const n = typeof v === "string" ? Number(v.replace(",", ".")) : Number(v);
+  return isNaN(n) ? 0 : n;
 }
 
-function formatCurrency(v) {
-  return Number(v || 0).toLocaleString("pt-BR", {
+function fmtCurrency(v) {
+  return toNumber(v).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
 }
 
-function formatDate(iso) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (isNaN(date.getTime())) return "";
-  date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
+function fmtDate(v) {
+  if (!v) return "—";
+  try {
+    const d = typeof v === "string" ? new Date(v) : v;
+    return d.toLocaleDateString("pt-BR");
+  } catch {
+    return v;
+  }
+}
+
+function fmtMonth(v) {
+  if (!v) return "—";
+  try {
+    const d = typeof v === "string" ? new Date(v) : v;
+    return d.toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
+  } catch {
+    if (typeof v === "string" && /^\d{4}-\d{2}/.test(v)) {
+      const [y, m] = v.split("-");
+      return `${m}/${y}`;
+    }
+    return v;
+  }
+}
+
+function chipColor(status) {
+  if (status === "PAGO") return "green";
+  if (status === "PENDENTE") return "orange";
+  if (status === "CANCELADO") return "grey";
+  return "blue";
 }
 </script>
