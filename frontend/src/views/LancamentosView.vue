@@ -1,12 +1,17 @@
 <template>
-  <v-container fluid class="pa-0 fill-height">
-    <v-card class="d-flex flex-column fill-height">
+  <v-container fluid class="pa-0 viewport">
+    <v-card class="d-flex flex-column viewport">
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Lançamentos</v-toolbar-title>
         <v-spacer />
 
         <!-- Atualizar -->
-        <v-btn icon @click="fetchAllData" :disabled="loading">
+        <v-btn
+          icon
+          @click="fetchAllData"
+          :disabled="loading"
+          :aria-label="'Atualizar'"
+        >
           <v-icon>mdi-refresh</v-icon>
         </v-btn>
 
@@ -30,7 +35,11 @@
 
         <!-- Botões ÍCONE-ONLY (xs) -->
         <v-toolbar-items class="d-flex d-sm-none">
-          <v-btn icon @click="openComprasDialog" :aria-label="'Compras no cartão'">
+          <v-btn
+            icon
+            @click="openComprasDialog"
+            :aria-label="'Compras no cartão'"
+          >
             <v-icon>mdi-credit-card-multiple</v-icon>
           </v-btn>
           <v-btn icon @click="openForm()" :aria-label="'Adicionar Lançamento'">
@@ -51,21 +60,29 @@
       </v-card-text>
     </v-card>
 
-    <!-- FORMULÁRIO (FULLSCREEN) -->
-    <v-dialog v-model="formDialog" persistent fullscreen transition="dialog-bottom-transition">
-      <v-card class="h-100 d-flex flex-column">
+    <!-- FORMULÁRIO (fullscreen apenas em mdAndDown) -->
+    <v-dialog
+      v-model="formDialog"
+      :fullscreen="mdAndDown"
+      :max-width="mdAndDown ? undefined : 960"
+      persistent
+      transition="dialog-bottom-transition"
+    >
+      <v-card class="dialog-card">
         <v-toolbar color="blue-darken-3" density="comfortable">
-          <v-btn icon @click="formDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-          <v-toolbar-title>{{ editedItem?.id ? "Editar Lançamento" : "Novo Lançamento" }}</v-toolbar-title>
+          <v-btn icon @click="formDialog = false"
+            ><v-icon>mdi-close</v-icon></v-btn
+          >
+          <v-toolbar-title>{{
+            editedItem?.id ? "Editar Lançamento" : "Novo Lançamento"
+          }}</v-toolbar-title>
           <v-spacer />
           <v-btn icon :loading="saving" @click="emitSaveFromToolbar">
             <v-icon>mdi-content-save</v-icon>
           </v-btn>
         </v-toolbar>
 
-        <v-card-text class="flex-grow-1 overflow-auto">
+        <v-card-text class="dialog-body">
           <LancamentosForm
             :model="editedItem"
             :categorias="categorias"
@@ -82,7 +99,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- DETALHES / PARCELAS (permanece do jeito que estava) -->
+    <!-- DETALHES / PARCELAS -->
     <ParcelasDetailDialog
       ref="parcelasDialogRef"
       :show="detailsDialog"
@@ -93,13 +110,18 @@
       @quit-parcela="quitLancamento"
     />
 
-    <!-- LISTA DE COMPRAS NO CARTÃO (FULLSCREEN) -->
-    <v-dialog v-model="comprasDialog" fullscreen transition="dialog-bottom-transition">
-      <v-card class="h-100 d-flex flex-column">
+    <!-- LISTA DE COMPRAS NO CARTÃO (fullscreen apenas em mdAndDown) -->
+    <v-dialog
+      v-model="comprasDialog"
+      :fullscreen="mdAndDown"
+      :max-width="mdAndDown ? undefined : 1100"
+      transition="dialog-bottom-transition"
+    >
+      <v-card class="dialog-card">
         <v-toolbar color="blue-darken-3" density="comfortable">
-          <v-btn icon @click="comprasDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
+          <v-btn icon @click="comprasDialog = false"
+            ><v-icon>mdi-close</v-icon></v-btn
+          >
           <v-toolbar-title>Compras no cartão</v-toolbar-title>
           <v-spacer />
           <v-btn icon :loading="comprasLoading" @click="fetchComprasCartao">
@@ -107,7 +129,7 @@
           </v-btn>
         </v-toolbar>
 
-        <v-card-text class="flex-grow-1 overflow-auto">
+        <v-card-text class="dialog-body">
           <ComprasCartaoList
             :items="comprasCartao"
             :loading="comprasLoading"
@@ -128,9 +150,9 @@
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="deleteDialog = false">Cancelar</v-btn>
-          <v-btn color="red-darken-1" @click="deleteItemConfirmed">
-            Excluir
-          </v-btn>
+          <v-btn color="red-darken-1" @click="deleteItemConfirmed"
+            >Excluir</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -162,11 +184,14 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from "vue";
+import { useDisplay } from "vuetify";
 import axios from "@/api/axios";
 import LancamentosForm from "@/components/LancamentosForm.vue";
 import ComprasResumoList from "@/components/ComprasResumoList.vue";
 import ParcelasDetailDialog from "@/components/ParcelasDetailDialog.vue";
 import ComprasCartaoList from "@/components/ComprasCartaoList.vue";
+
+const { mdAndDown } = useDisplay();
 
 const parcelasDialogRef = ref(null);
 
@@ -287,11 +312,10 @@ function openForm(item = null) {
   formDialog.value = true;
 }
 
-/** Dispara o @save do form a partir da toolbar do dialog fullscreen */
+/** Dispara o @save do form a partir da toolbar do dialog */
 function emitSaveFromToolbar() {
-  // O próprio form emite @save; aqui apenas focamos no primeiro botão "Salvar" dele.
-  // Caso queira disparar nativamente, podemos usar um ref no form e expor um método.
-  const evt = new CustomEvent("submit");
+  // Damos foco no botão "Salvar" dentro do formulário via evento genérico.
+  const evt = new Event("submit", { bubbles: true });
   document.activeElement?.dispatchEvent(evt);
 }
 
@@ -315,9 +339,7 @@ async function fetchComprasCartao() {
   }
 }
 
-/**
- * Salvar (cartão => /compras-cartao/, cash => /lancamentos/)
- */
+/** Salvar (cartão => /compras-cartao/, cash => /lancamentos/) */
 async function saveItem(payload) {
   saving.value = true;
   try {
@@ -395,7 +417,7 @@ async function openDetailsFromList(item) {
   await openDetailsByCompraId(compraId);
 }
 
-/** Abre detalhes vindo da LISTA DE COMPRAS (item já é compra, mas garantimos o detalhe) */
+/** Abre detalhes vindo da LISTA DE COMPRAS */
 async function openDetailsFromCompras(item) {
   const compraId = item?.id;
   if (!compraId) return;
@@ -463,7 +485,24 @@ function handleApiError(error, defaultMessage) {
 </script>
 
 <style scoped>
+/* Ocupa a viewport inteira, independente do device */
+.viewport {
+  min-height: 100vh;
+}
+
+/* Evita quebra de texto dos botões */
 .text-no-wrap {
   white-space: nowrap;
+}
+
+/* Deixa os diálogos com layout alto, rolagem interna do corpo */
+.dialog-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.dialog-body {
+  flex: 1 1 auto;
+  overflow: auto;
 }
 </style>
