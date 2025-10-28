@@ -1,24 +1,46 @@
 <template>
-  <v-container fluid>
-    <v-card>
+  <v-container fluid class="pa-0 fill-height">
+    <v-card class="d-flex flex-column fill-height">
       <v-toolbar color="blue-darken-3">
         <v-toolbar-title>Lançamentos</v-toolbar-title>
         <v-spacer />
-        <v-btn icon @click="fetchAllData">
+
+        <!-- Atualizar -->
+        <v-btn icon @click="fetchAllData" :disabled="loading">
           <v-icon>mdi-refresh</v-icon>
         </v-btn>
-        <v-btn
-          prepend-icon="mdi-credit-card-multiple"
-          @click="openComprasDialog"
-        >
-          Compras no cartão
-        </v-btn>
-        <v-btn prepend-icon="mdi-plus" @click="openForm()">
-          Adicionar Lançamento
-        </v-btn>
+
+        <!-- Botões com TEXTO (sm e acima) -->
+        <v-toolbar-items class="d-none d-sm-flex">
+          <v-btn
+            prepend-icon="mdi-credit-card-multiple"
+            class="text-no-wrap"
+            @click="openComprasDialog"
+          >
+            Compras no cartão
+          </v-btn>
+          <v-btn
+            prepend-icon="mdi-plus"
+            class="text-no-wrap ms-2"
+            @click="openForm()"
+          >
+            Adicionar Lançamento
+          </v-btn>
+        </v-toolbar-items>
+
+        <!-- Botões ÍCONE-ONLY (xs) -->
+        <v-toolbar-items class="d-flex d-sm-none">
+          <v-btn icon @click="openComprasDialog" :aria-label="'Compras no cartão'">
+            <v-icon>mdi-credit-card-multiple</v-icon>
+          </v-btn>
+          <v-btn icon @click="openForm()" :aria-label="'Adicionar Lançamento'">
+            <v-icon>mdi-plus</v-icon>
+          </v-btn>
+        </v-toolbar-items>
       </v-toolbar>
 
-      <v-card-text>
+      <!-- Conteúdo ocupa o restante da tela -->
+      <v-card-text class="flex-grow-1 overflow-auto">
         <ComprasResumoList
           :items="lancamentosResumo"
           :loading="loading"
@@ -29,23 +51,38 @@
       </v-card-text>
     </v-card>
 
-    <!-- Formulário -->
-    <v-dialog v-model="formDialog" persistent max-width="720px">
-      <LancamentosForm
-        :model="editedItem"
-        :categorias="categorias"
-        :subcategorias="subcategorias"
-        :membros="membrosOptions"
-        :status-options="statusOptions"
-        :escopo-options="escopoOptions"
-        :cartoes="cartoes"
-        :saving="saving"
-        @close="formDialog = false"
-        @save="saveItem"
-      />
+    <!-- FORMULÁRIO (FULLSCREEN) -->
+    <v-dialog v-model="formDialog" persistent fullscreen transition="dialog-bottom-transition">
+      <v-card class="h-100 d-flex flex-column">
+        <v-toolbar color="blue-darken-3" density="comfortable">
+          <v-btn icon @click="formDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+          <v-toolbar-title>{{ editedItem?.id ? "Editar Lançamento" : "Novo Lançamento" }}</v-toolbar-title>
+          <v-spacer />
+          <v-btn icon :loading="saving" @click="emitSaveFromToolbar">
+            <v-icon>mdi-content-save</v-icon>
+          </v-btn>
+        </v-toolbar>
+
+        <v-card-text class="flex-grow-1 overflow-auto">
+          <LancamentosForm
+            :model="editedItem"
+            :categorias="categorias"
+            :subcategorias="subcategorias"
+            :membros="membrosOptions"
+            :status-options="statusOptions"
+            :escopo-options="escopoOptions"
+            :cartoes="cartoes"
+            :saving="saving"
+            @close="formDialog = false"
+            @save="saveItem"
+          />
+        </v-card-text>
+      </v-card>
     </v-dialog>
 
-    <!-- Detalhes / Parcelas -->
+    <!-- DETALHES / PARCELAS (permanece do jeito que estava) -->
     <ParcelasDetailDialog
       ref="parcelasDialogRef"
       :show="detailsDialog"
@@ -56,21 +93,21 @@
       @quit-parcela="quitLancamento"
     />
 
-    <!-- Lista de Compras no Cartão -->
-    <v-dialog v-model="comprasDialog" max-width="1000px">
-      <v-card>
+    <!-- LISTA DE COMPRAS NO CARTÃO (FULLSCREEN) -->
+    <v-dialog v-model="comprasDialog" fullscreen transition="dialog-bottom-transition">
+      <v-card class="h-100 d-flex flex-column">
         <v-toolbar color="blue-darken-3" density="comfortable">
+          <v-btn icon @click="comprasDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
           <v-toolbar-title>Compras no cartão</v-toolbar-title>
           <v-spacer />
           <v-btn icon :loading="comprasLoading" @click="fetchComprasCartao">
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
-          <v-btn icon @click="comprasDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
         </v-toolbar>
 
-        <v-card-text>
+        <v-card-text class="flex-grow-1 overflow-auto">
           <ComprasCartaoList
             :items="comprasCartao"
             :loading="comprasLoading"
@@ -250,6 +287,14 @@ function openForm(item = null) {
   formDialog.value = true;
 }
 
+/** Dispara o @save do form a partir da toolbar do dialog fullscreen */
+function emitSaveFromToolbar() {
+  // O próprio form emite @save; aqui apenas focamos no primeiro botão "Salvar" dele.
+  // Caso queira disparar nativamente, podemos usar um ref no form e expor um método.
+  const evt = new CustomEvent("submit");
+  document.activeElement?.dispatchEvent(evt);
+}
+
 /** Diálogo "Compras no cartão" */
 function openComprasDialog() {
   comprasDialog.value = true;
@@ -304,7 +349,6 @@ async function saveItem(payload) {
 
       formDialog.value = false;
 
-      // Atualiza listas e mostra detalhes da compra criada
       await Promise.all([fetchLancamentosResumo(), fetchComprasCartao()]);
       await openDetailsByCompraId(compraCriada.id);
     } else {
@@ -340,7 +384,6 @@ async function saveItem(payload) {
 
 /** Abre detalhes vindo do RESUMO (resolve o compraId antes) */
 async function openDetailsFromList(item) {
-  // Tenta extrair o ID da compra a partir do item do resumo
   const compraId =
     item?.raw?.compra_cartao?.id ||
     item?.raw?.compra_cartao_id ||
@@ -348,10 +391,7 @@ async function openDetailsFromList(item) {
     item?.compra_cartao_id ||
     null;
 
-  if (!compraId) {
-    // se não existe compra ligada, não abre
-    return;
-  }
+  if (!compraId) return;
   await openDetailsByCompraId(compraId);
 }
 
@@ -421,3 +461,9 @@ function handleApiError(error, defaultMessage) {
   errorDialog.value = true;
 }
 </script>
+
+<style scoped>
+.text-no-wrap {
+  white-space: nowrap;
+}
+</style>
